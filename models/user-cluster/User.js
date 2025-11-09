@@ -10,7 +10,7 @@ const User = sequelize.define(
       unique: true,
     },
     email: {
-      type: DataTypes.STRING(16),
+      type: DataTypes.STRING,
       allowNull: false,
       unique: true,
     },
@@ -40,6 +40,14 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       allowNull: false,
+    },
+    otpCode: {
+      type: DataTypes.STRING(6),
+      allowNull: true,
+    },
+    otpExpires: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
   },
   {
