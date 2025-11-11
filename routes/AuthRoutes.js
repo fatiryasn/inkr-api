@@ -161,8 +161,8 @@ const verifyOtpRules = [
 
 const googleAuthRules = [
   body("fullName")
-    .optional({ values: "falsy" })
     .trim()
+    .notEmpty()
     .withMessage("Field yang dibutuhkan masih belum lengkap"),
 
   body("email")
@@ -235,6 +235,9 @@ router.post(
   validateMiddleware,
   completeGoogleAuth
 );
+
+// //me
+// router.get('/me', verifyToken(), )
 
 //token
 router.get("/token", token);

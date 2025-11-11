@@ -5,7 +5,7 @@ const User = sequelize.define(
   "User",
   {
     username: {
-      type: DataTypes.STRING(16),
+      type: DataTypes.STRING,
       allowNull: false,
       unique: true,
     },
@@ -32,6 +32,11 @@ const User = sequelize.define(
       allowNull: true,
     },
     isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+    },
+    isVerified: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       allowNull: false,

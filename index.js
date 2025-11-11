@@ -23,11 +23,11 @@ app.listen(port, async () => {
 
   try {
     await sequelize.authenticate();
-    console.log("✅ Koneksi ke database berhasil");
+    console.log("✅ Database connected successfully");
 
-    await sequelize.sync({alter: true});
-    console.log("🛠️ Model disinkronkan ke database");
+    await sequelize.sync();
+    console.log("🛠️ Model synchronized");
   } catch (err) {
-    console.error("❌ Gagal koneksi atau sync database:", err);
+    console.error("❌ Failed to sync/connect to database", err);
   }
 });

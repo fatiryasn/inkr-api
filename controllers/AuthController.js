@@ -1,6 +1,6 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer")
+const nodemailer = require("nodemailer");
 const { createAccessToken, createRefreshToken } = require("../utils/tokens");
 const { generateOtp } = require("../utils/generateOtp");
 const { User, UserProfile, Company, Industry } = require("../models");
@@ -18,7 +18,7 @@ exports.login = async (req, res) => {
         .status(401)
         .json({ success: false, message: "Email atau password salah" });
     }
-    if (user.isActive === false) {
+    if (user.isActive === false || user.isVerified === false) {
       return res.status(403).json({
         success: false,
         message: "Akun ini tidak aktif, tidak dapat login dengan akun ini.",
@@ -76,65 +76,117 @@ exports.jsRegister = async (req, res) => {
     const { username, email, password, fullName, country, city, gender } =
       req.body;
 
-    const existsUsername = await User.findOne({ where: { username } });
-    if (existsUsername) {
+    const existingByUsername = await User.findOne({
+      where: { username },
+      transaction: t,
+    });
+    const existingByEmail = await User.findOne({
+      where: { email },
+      transaction: t,
+    });
+
+    if (
+      existingByUsername &&
+      existingByEmail &&
+      existingByUsername.id !== existingByEmail.id
+    ) {
       await t.rollback();
       return res.status(409).json({
         success: false,
-        message: "Username sudah digunakan, silahkan gunakan username lain",
+        message: "Username atau email sudah digunakan.",
       });
     }
 
-    const existsEmail = await User.findOne({ where: { email } });
-    if (existsEmail) {
+    if (
+      (existingByUsername && existingByUsername.isVerified) ||
+      (existingByEmail && existingByEmail.isVerified)
+    ) {
       await t.rollback();
       return res.status(409).json({
         success: false,
-        message: "Email sudah terdaftar, silahkan gunakan email lain",
+        message: "Username atau email sudah digunakan.",
       });
     }
 
+    // generate OTP
     const { otp, otpExpires } = generateOtp();
-
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = await User.create(
-      {
-        username,
-        email,
-        password: hashedPassword,
-        role: "job-seeker",
-        authProvider: "local",
-        isComplete: true,
-        isActive: false,
-        otpCode: otp,
-        otpExpires,
-      },
-      { transaction: t }
-    );
+    let user;
+    if (existingByEmail || existingByUsername) {
+      user = existingByEmail || existingByUsername;
+      await user.update(
+        {
+          username,
+          email,
+          password: hashedPassword,
+          role: "job-seeker",
+          authProvider: "local",
+          isComplete: true,
+          isVerified: false,
+          isActive: false,
+          otpCode: otp,
+          otpExpires,
+        },
+        { transaction: t }
+      );
 
-    await UserProfile.create(
-      {
-        userId: newUser.id,
-        fullName,
-        country,
-        city,
-        gender,
-        profilePicture: null,
-        phoneNumber: null,
-        bio: null,
-        address: null,
-        dateOfBirth: null,
-      },
-      { transaction: t }
-    );
+      const profile = await UserProfile.findOne({
+        where: { userId: user.id },
+        transaction: t,
+      });
+      if (profile) {
+        await profile.update(
+          { fullName, country, city, gender },
+          { transaction: t }
+        );
+      } else {
+        await UserProfile.create(
+          {
+            userId: user.id,
+            fullName,
+            country,
+            city,
+            gender,
+          },
+          { transaction: t }
+        );
+      }
+    } else {
+      user = await User.create(
+        {
+          username,
+          email,
+          password: hashedPassword,
+          role: "job-seeker",
+          authProvider: "local",
+          isComplete: true,
+          isVerified: false,
+          isActive: false,
+          otpCode: otp,
+          otpExpires,
+        },
+        { transaction: t }
+      );
+
+      await UserProfile.create(
+        {
+          userId: user.id,
+          fullName,
+          country,
+          city,
+          gender,
+        },
+        { transaction: t }
+      );
+    }
 
     await t.commit();
 
-    const transporter = await createTransporter()
+    const transporter = await createTransporter();
     const info = await transporter.sendMail({
-      from: `"Inklusi Kerja" <${process.env.MAIL_USER}>`,
+      from: `"Inklusi Kerja" <${transporter.options.auth.user}>`,
       to: email,
       subject: "Verifikasi Akun Kamu",
       html: `
@@ -150,15 +202,15 @@ exports.jsRegister = async (req, res) => {
       success: true,
       message: "Akun berhasil dibuat, hanya perlu verifikasi otp",
       data: {
-        id: newUser.id,
-        username: newUser.username,
-        email: newUser.email,
-        role: newUser.role,
-        authProvider: newUser.authProvider,
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        authProvider: user.authProvider,
       },
     });
   } catch (error) {
-    await t.rollback();
+    if (t.finished !== "commit") await t.rollback();
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -178,28 +230,44 @@ exports.cmRegister = async (req, res) => {
       industryName,
     } = req.body;
 
-    const existsUsername = await User.findOne({ where: { username } });
-    if (existsUsername) {
+    const existingByUsername = await User.findOne({
+      where: { username },
+      transaction: t,
+    });
+    const existingByEmail = await User.findOne({
+      where: { email },
+      transaction: t,
+    });
+
+    if (
+      existingByUsername &&
+      existingByEmail &&
+      existingByUsername.id !== existingByEmail.id
+    ) {
       await t.rollback();
       return res.status(409).json({
         success: false,
-        message: "Username sudah digunakan, silahkan gunakan username lain",
+        message: "Username atau email sudah digunakan.",
       });
     }
 
-    const existsEmail = await User.findOne({ where: { email } });
-    if (existsEmail) {
+    if (
+      (existingByUsername && existingByUsername.isVerified) ||
+      (existingByEmail && existingByEmail.isVerified)
+    ) {
       await t.rollback();
       return res.status(409).json({
         success: false,
-        message: "Email sudah terdaftar, silahkan gunakan email lain",
+        message: "Username atau email sudah digunakan.",
       });
     }
 
     //industry type check
     let finalIndustry = null;
     if (industryId) {
-      const existingIndustry = await Industry.findByPk(industryId);
+      const existingIndustry = await Industry.findByPk(industryId, {
+        transaction: t,
+      });
       if (!existingIndustry) {
         await t.rollback();
         return res.status(400).json({
@@ -211,6 +279,7 @@ exports.cmRegister = async (req, res) => {
     } else if (industryName) {
       const existingByName = await Industry.findOne({
         where: { name: industryName },
+        transaction: t,
       });
       if (existingByName) {
         finalIndustry = existingByName;
@@ -228,48 +297,93 @@ exports.cmRegister = async (req, res) => {
       });
     }
 
-    const {otp, otpExpires} = generateOtp()
-
+    //generate OTP
+    const { otp, otpExpires } = generateOtp();
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = await User.create(
-      {
-        username,
-        email,
-        password: hashedPassword,
-        role: "company",
-        authProvider: "local",
-        isComplete: true,
-        isActive: false,
-        otpCode: otp,
-        otpExpires,
-      },
-      { transaction: t }
-    );
+    let user;
+    if (existingByEmail || existingByUsername) {
+      user = existingByEmail || existingByUsername;
+      await user.update(
+        {
+          username,
+          email,
+          password: hashedPassword,
+          role: "company",
+          authProvider: "local",
+          isComplete: true,
+          isActive: false,
+          isVerified: false,
+          otpCode: otp,
+          otpExpires,
+        },
+        { transaction: t }
+      );
 
-    await Company.create(
-      {
-        userId: newUser.id,
-        companyName,
-        companyDescription: null,
-        country,
-        city,
-        address: null,
-        logoPicture: null,
-        establishedYear: null,
-        industryId: finalIndustry.id,
-        industryName: finalIndustry.name,
-        websiteLink: null,
-      },
-      { transaction: t }
-    );
+      const company = await Company.findOne({
+        where: { userId: user.id },
+        transaction: t,
+      });
+      if (company) {
+        await company.update(
+          {
+            companyName,
+            country,
+            city,
+            industryId: finalIndustry.id,
+            industryName: finalIndustry.name,
+          },
+          { transaction: t }
+        );
+      } else {
+        await Company.create(
+          {
+            userId: user.id,
+            companyName,
+            country,
+            city,
+            industryId: finalIndustry.id,
+            industryName: finalIndustry.name,
+          },
+          { transaction: t }
+        );
+      }
+    } else {
+      user = await User.create(
+        {
+          username,
+          email,
+          password: hashedPassword,
+          role: "company",
+          authProvider: "local",
+          isComplete: true,
+          isVerified: false,
+          isActive: false,
+          otpCode: otp,
+          otpExpires,
+        },
+        { transaction: t }
+      );
+
+      await Company.create(
+        {
+          userId: user.id,
+          companyName,
+          country,
+          city,
+          industryId: finalIndustry.id,
+          industryName: finalIndustry.name,
+        },
+        { transaction: t }
+      );
+    }
 
     await t.commit();
 
-    const transporter = await createTransporter()
+    const transporter = await createTransporter();
     const info = await transporter.sendMail({
-      from: `"Inklusi Kerja" <${process.env.MAIL_USER}>`,
+      from: `"Inklusi Kerja" <${transporter.options.auth.user}>`,
       to: email,
       subject: "Verifikasi Akun Kamu",
       html: `
@@ -285,15 +399,15 @@ exports.cmRegister = async (req, res) => {
       success: true,
       message: "Akun berhasil dibuat, hanya perlu verifikasi otp",
       data: {
-        id: newUser.id,
-        username: newUser.username,
-        email: newUser.email,
-        role: newUser.role,
-        authProvider: newUser.authProvider,
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        authProvider: user.authProvider,
       },
     });
   } catch (error) {
-    await t.rollback();
+    if (t.finished !== "commit") await t.rollback();
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -309,7 +423,7 @@ exports.verifyOtp = async (req, res) => {
         .status(404)
         .json({ success: false, message: "User tidak ditemukan" });
 
-    if (user.isActive)
+    if (user.isActive || user.isVerified)
       return res
         .status(400)
         .json({ success: false, message: "Akun sudah aktif" });
@@ -325,6 +439,7 @@ exports.verifyOtp = async (req, res) => {
         .json({ success: false, message: "Kode OTP sudah kedaluwarsa" });
 
     user.isActive = true;
+    user.isVerified = true;
     user.otpCode = null;
     user.otpExpires = null;
     await user.save();
@@ -390,6 +505,7 @@ exports.googleAuth = async (req, res) => {
         role: "job-seeker",
         authProvider: "google",
         isComplete: false,
+        isVerified: true,
         isActive: true,
       },
       { transaction: t }
@@ -501,6 +617,18 @@ exports.completeGoogleAuth = async (req, res) => {
   }
 };
 
+// //me
+// exports.me = async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+//     const user = await User.findByPk(userId, {
+//       attributes: { exclude: ["password", "refreshToken", "otpCode", "otpExpires"] },
+//     });
+//   } catch (error) {
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
 //token
 exports.token = async (req, res) => {
   try {
@@ -547,4 +675,3 @@ exports.logout = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-

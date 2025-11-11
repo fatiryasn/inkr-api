@@ -42,7 +42,7 @@ const Company = sequelize.define(
     },
     industryId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: "industries",
         key: "id",
@@ -50,7 +50,7 @@ const Company = sequelize.define(
     },
     industryName: {
       type: DataTypes.STRING,
-      allowNull: true,
+      allowNull: false,
     },
     websiteLink: {
       type: DataTypes.STRING(300),
