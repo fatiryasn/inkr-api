@@ -13,7 +13,7 @@ const Company = sequelize.define(
       },
     },
     companyName: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(100),
       allowNull: false,
     },
     companyDescription: {
@@ -29,10 +29,6 @@ const Company = sequelize.define(
       allowNull: false,
     },
     address: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    logoPicture: {
       type: DataTypes.STRING,
       allowNull: true,
     },

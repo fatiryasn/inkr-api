@@ -444,7 +444,7 @@ exports.verifyOtp = async (req, res) => {
     user.otpExpires = null;
     await user.save();
 
-    res.json({
+    return res.status(200).json({
       success: true,
       message: "Verifikasi berhasil, hanya perlu login untuk melanjutkan",
     });

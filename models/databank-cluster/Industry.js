@@ -7,6 +7,7 @@ const Industry = sequelize.define(
     name: {
       type: DataTypes.STRING(20),
       allowNull: false,
+      unique: true,
     },
     description: {
       type: DataTypes.STRING(100),

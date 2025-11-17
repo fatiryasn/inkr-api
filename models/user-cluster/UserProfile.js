@@ -13,12 +13,8 @@ const UserProfile = sequelize.define(
       },
     },
     fullName: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(100),
       allowNull: false,
-    },
-    profilePicture: {
-      type: DataTypes.STRING,
-      allowNull: true,
     },
     phoneNumber: {
       type: DataTypes.STRING(16),
@@ -37,7 +33,7 @@ const UserProfile = sequelize.define(
       allowNull: false,
     },
     address: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(100),
       allowNull: true,
     },
     gender: {

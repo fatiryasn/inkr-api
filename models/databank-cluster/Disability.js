@@ -7,6 +7,7 @@ const Disability = sequelize.define(
     name: {
       type: DataTypes.STRING(20),
       allowNull: false,
+      unique: true,
     },
     description: {
       type: DataTypes.STRING(100),
@@ -14,11 +15,12 @@ const Disability = sequelize.define(
     },
     type: {
       type: DataTypes.ENUM(
-        "visual",
-        "hearing",
+        "sensory",
         "intellectual",
         "mental",
-        "physical"
+        "physical",
+        "multiple",
+        "other"
       ),
       allowNull: false,
     },

@@ -22,6 +22,10 @@ const User = sequelize.define(
       type: DataTypes.ENUM("admin", "job-seeker", "company"),
       allowNull: false,
     },
+    profilePicture: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     authProvider: {
       type: DataTypes.ENUM("local", "google"),
       defaultValue: "local",
