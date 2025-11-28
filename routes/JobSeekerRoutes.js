@@ -81,12 +81,12 @@ const addJsEducationRules = [
   body("startDate")
     .notEmpty()
     .withMessage("Field yang dibutuhkan masih belum lengkap")
-    .isDate()
+    .isISO8601()
     .withMessage("Format tanggal tidak valid"),
 
   body("endDate")
     .optional({ values: "falsy" })
-    .isDate()
+    .isISO8601()
     .withMessage("Format tanggal tidak valid"),
 
   body("description")
@@ -138,12 +138,12 @@ const addJsExperienceRules = [
   body("startDate")
     .notEmpty()
     .withMessage("Field yang dibutuhkan masih belum lengkap")
-    .isDate()
+    .isISO8601()
     .withMessage("Format tanggal tidak valid"),
 
   body("endDate")
     .optional({ values: "falsy" })
-    .isDate()
+    .isISO8601()
     .withMessage("Format tanggal tidak valid"),
 
   body("description")

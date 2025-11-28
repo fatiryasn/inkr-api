@@ -137,9 +137,19 @@ const cmRegisterRules = [
     .isLength({ min: 3 })
     .withMessage("Nama industri minimal 3 karakter"),
 
+  body("websiteLink")
+    .optional({ values: "falsy" })
+    .trim()
+    .toLowerCase()
+    .isURL()
+    .withMessage("Website URL format is invalid"),
+
   body().custom((value, { req }) => {
     if (!req.body.industryId && !req.body.industryName) {
       throw new Error("Field yang dibutuhkan masih belum lengkap");
+    }
+    if (req.body.industryId && req.body.industryName) {
+      throw new Error("Industry data is invalid");
     }
     return true;
   }),

@@ -51,6 +51,14 @@ const cmProfileUpdateRules = [
     .isLength({ min: 3 })
     .withMessage("Nama industri terlalu pendek (min 3 karakter)"),
 
+  body("websiteLink")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 300 })
+    .withMessage("Link website terlalu panjang (max 300 karakter)")
+    .isURL()
+    .withMessage("Format link website tidak valid"),
+
   body().custom((value, { req }) => {
     if (!req.body.industryId && !req.body.industryName) {
       throw new Error("Field yang dibutuhkan masih belum lengkap");

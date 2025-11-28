@@ -29,7 +29,7 @@ const Company = sequelize.define(
       allowNull: false,
     },
     address: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(100),
       allowNull: true,
     },
     establishedYear: {

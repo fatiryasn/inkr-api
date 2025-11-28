@@ -10,14 +10,14 @@ const verifyToken =
       if (!token) {
         return res
           .status(401)
-          .json({ success: false, message: "Token tidak ditemukan" });
+          .json({ success: false, message: "Token not found" });
       }
 
       jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
         if (err) {
           return res.status(403).json({
             success: false,
-            message: "Token tidak valid atau sudah kedaluwarsa",
+            message: "Token is invalid or already expired",
           });
         }
 
@@ -31,7 +31,7 @@ const verifyToken =
           if (!roles.includes(user.role)) {
             return res.status(403).json({
               success: false,
-              message: "Akses ditolak",
+              message: "Access denied",
             });
           }
         }
@@ -39,7 +39,7 @@ const verifyToken =
         next();
       });
     } catch (error) {
-      res.status(403).json({ success: false, message: "Token tidak valid" });
+      res.status(403).json({ success: false, message: "Token is invalid" });
     }
   };
 

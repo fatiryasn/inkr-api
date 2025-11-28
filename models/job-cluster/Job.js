@@ -21,15 +21,15 @@ const Job = sequelize.define(
       allowNull: false,
     },
     employmentType: {
-      type: DataTypes.ENUM("full-time", "part-time", "internship"),
+      type: DataTypes.ENUM("full-time", "part-time", "internship", "blank"),
       allowNull: false,
     },
     locationType: {
-      type: DataTypes.ENUM("on-site", "remote", "hybrid"),
+      type: DataTypes.ENUM("on-site", "remote", "hybrid", "blank"),
       allowNull: false,
     },
     address: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(100),
       allowNull: true,
     },
     minSalary: {

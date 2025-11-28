@@ -208,6 +208,7 @@ exports.jsRegister = async (req, res) => {
         role: user.role,
         authProvider: user.authProvider,
       },
+      emailTemp: nodemailer.getTestMessageUrl(info)
     });
   } catch (error) {
     if (t.finished !== "commit") await t.rollback();
@@ -228,6 +229,7 @@ exports.cmRegister = async (req, res) => {
       city,
       industryId,
       industryName,
+      websiteLink
     } = req.body;
 
     const existingByUsername = await User.findOne({
@@ -374,6 +376,7 @@ exports.cmRegister = async (req, res) => {
           city,
           industryId: finalIndustry.id,
           industryName: finalIndustry.name,
+          websiteLink
         },
         { transaction: t }
       );
@@ -405,6 +408,7 @@ exports.cmRegister = async (req, res) => {
         role: user.role,
         authProvider: user.authProvider,
       },
+      emailTemp: nodemailer.getTestMessageUrl(info),
     });
   } catch (error) {
     if (t.finished !== "commit") await t.rollback();

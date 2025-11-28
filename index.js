@@ -5,8 +5,10 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 
 const authRoute = require("./routes/AuthRoutes")
-const JobSeekerRoute = require("./routes/JobSeekerRoutes")
+const jobSeekerRoute = require("./routes/JobSeekerRoutes")
 const userRoute = require("./routes/UserRoutes")
+const jobRoute = require('./routes/JobRoutes')
+const dataRoute = require('./routes/DataRoutes')
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -16,7 +18,9 @@ app.use(cors({ credentials: true, origin: true }));
 
 app.use('/api/auth', authRoute)
 app.use("/api", userRoute);
-app.use("/api", JobSeekerRoute);
+app.use("/api", jobSeekerRoute);
+app.use("/api", jobRoute)
+app.use("/api/data", dataRoute)
 
 app.get("/", (req, res) => {
   res.send("Inklusi kerja API");
@@ -29,7 +33,7 @@ app.listen(port, async () => {
     await sequelize.authenticate();
     console.log("✅ Database connected successfully");
 
-    await sequelize.sync({alter: true});
+    await sequelize.sync();
     console.log("🛠️ Model synchronized");
   } catch (err) {
     console.error("❌ Failed to sync/connect to database", err);
