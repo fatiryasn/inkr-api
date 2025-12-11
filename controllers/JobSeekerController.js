@@ -43,6 +43,7 @@ exports.jsProfileUpdate = async (req, res) => {
       "city",
       "address",
       "gender",
+      "dateOfBirth"
     ];
 
     const updatedData = {};
@@ -90,6 +91,18 @@ exports.getJsEducations = async (req, res) => {
       limit,
       offset,
       order: [["startDate", "DESC"]],
+      include: [
+        {
+          model: Company,
+          attributes: ["id", "companyName"],
+          include: [
+            {
+              model: User,
+              attributes: ["id", "profilePicture"],
+            },
+          ],
+        },
+      ],
     });
 
     const institutionIds = [
@@ -189,6 +202,18 @@ exports.getJsExperiences = async (req, res) => {
       limit,
       offset,
       order: [["startDate", "DESC"]],
+      include: [
+        {
+          model: Company,
+          attributes: ["id", "companyName"],
+          include: [
+            {
+              model: User,
+              attributes: ["id", "profilePicture"],
+            },
+          ],
+        },
+      ],
     });
 
     const companyIds = [
@@ -330,6 +355,11 @@ exports.getJsDisabilities = async (req, res) => {
       limit,
       offset,
       order: [["id", "DESC"]],
+      include: [
+        {
+          model: Disability,
+        }
+      ]
     });
 
     const totalPages = Math.ceil(count / limit);
@@ -513,7 +543,7 @@ exports.addJsSkill = async (req, res) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    const { skillId, skillName } = req.body;
+    const { skillId, skillName, description } = req.body;
 
     let finalSkillId = null;
     let finalSkillName = null;
@@ -582,6 +612,7 @@ exports.addJsSkill = async (req, res) => {
         userId,
         skillId: finalSkillId || null,
         skillName: finalSkillName,
+        description
       },
       { transaction: t }
     );
@@ -609,7 +640,7 @@ exports.addJsDisability = async (req, res) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    const { disabilityId, disabilityName, type } = req.body;
+    const { disabilityId, disabilityName, type, description } = req.body;
 
     let finalDisabilityId = null;
     let finalDisabilityName = null;
@@ -684,6 +715,8 @@ exports.addJsDisability = async (req, res) => {
         userId,
         disabilityId: finalDisabilityId || null,
         disabilityName: finalDisabilityName,
+        type: type,
+        description
       },
       { transaction: t }
     );

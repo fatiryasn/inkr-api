@@ -17,7 +17,7 @@ const Company = sequelize.define(
       allowNull: false,
     },
     companyDescription: {
-      type: DataTypes.STRING(500),
+      type: DataTypes.STRING(1000),
       allowNull: true,
     },
     country: {

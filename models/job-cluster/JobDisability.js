@@ -24,6 +24,17 @@ const JobDisability = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    type: {
+      type: DataTypes.ENUM(
+        "sensory",
+        "intellectual",
+        "mental",
+        "physical",
+        "multiple",
+        "other"
+      ),
+      allowNull: false,
+    },
   },
   {
     tableName: "job_disabilities",

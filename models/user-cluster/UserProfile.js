@@ -21,7 +21,7 @@ const UserProfile = sequelize.define(
       allowNull: true,
     },
     bio: {
-      type: DataTypes.STRING(500),
+      type: DataTypes.STRING(1000),
       allowNull: true,
     },
     country: {

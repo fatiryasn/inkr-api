@@ -83,14 +83,14 @@ const addJobRules = [
       if (!moment(value, "YYYY-MM-DD", true).isValid()) {
         throw new Error("Invalid end date format (YYYY-MM-DD)");
       }
-      const today = moment().startOf("day");
+      const tomorrow = moment().add(1, "day").startOf("day");
       const end = moment(value, "YYYY-MM-DD");
-      if (end.isBefore(today))
-        throw new Error("End date cannot be less than today");
+      if (end.isBefore(tomorrow))
+        throw new Error("Tanggal akhir minimal adalah besok atau setelahnya");
       if (req.body.startDate) {
         const start = moment(req.body.startDate, "YYYY-MM-DD");
-        if (end.isBefore(start))
-          throw new Error("End date cannot be less than start date");
+        if (!end.isAfter(start))
+          throw new Error("Tanggal akhir harus setelah tanggal awal");
       }
       return true;
     }),
@@ -101,12 +101,12 @@ const addJobRules = [
     .withMessage("Invalid skills format (Array expected)")
     .bail()
     .custom((arr) => {
-      if (arr.length > 50) throw new Error("Too many skills (max 50)");
+      if (arr.length > 20) throw new Error("Too many skills (max 20)");
       for (const item of arr) {
         if (!item || typeof item !== "object")
           throw new Error("Invalid skill item (Object expected)");
 
-        const hasId = item.id !== undefined && item.id !== null;
+        const hasId = Number.isInteger(item.id) && item.id > 0;
         const hasName =
           item.name !== undefined &&
           item.name !== null &&
@@ -114,9 +114,6 @@ const addJobRules = [
 
         if (!hasId && !hasName) {
           throw new Error("Each skill must have an ID or name.");
-        }
-        if (hasId && hasName) {
-          throw new Error("Skills cannot send ID and name at the same time");
         }
 
         if (hasId) {
@@ -143,21 +140,18 @@ const addJobRules = [
     .withMessage("Invalid disabilities format (Array expected)")
     .bail()
     .custom((arr) => {
-      if (arr.length > 50) throw new Error("Too many disabilities (max 50)");
+      if (arr.length > 20) throw new Error("Too many disabilities (max 20)");
 
       for (const item of arr) {
         if (!item || typeof item !== "object")
           throw new Error("Invalid disability item (Object expected)");
 
-        const hasId = item.id !== undefined && item.id !== null;
+        const hasId = Number.isInteger(item.id) && item.id > 0;
         const hasName = item.name && String(item.name).trim() !== "";
         const hasType = item.type && String(item.type).trim() !== "";
 
         //id given
         if (hasId) {
-          if (hasName || hasType)
-            throw new Error("Disabilities cannot send ID along with name/type");
-
           if (!Number.isInteger(item.id) || item.id <= 0)
             throw new Error(
               "Invalid disability id (Positive integer expected)"
@@ -165,7 +159,6 @@ const addJobRules = [
 
           continue;
         }
-
         //name / type given
         if (!hasName)
           throw new Error("Disability name is required if ID is not included");
@@ -207,9 +200,6 @@ const addJobSkillRules = [
     if (!skillId && !skillName) {
       throw new Error("Required fields are still incomplete");
     }
-    if (skillId && skillName) {
-      throw new Error("Cant send both id and name");
-    }
     return true;
   }),
 ];
@@ -249,14 +239,8 @@ const addJobDisabilityRules = [
       throw new Error("Required fields are still incomplete");
     }
 
-    if (disabilityId && (disabilityName || type)) {
-      throw new Error("Cant send both id and name+type");
-    }
-
     if (disabilityName && !type) {
-      throw new Error(
-        "Type is required for new disability name"
-      );
+      throw new Error("Type is required for new disability name");
     }
 
     return true;
@@ -315,9 +299,55 @@ const editJobRules = [
 const updateJobStatusRules = [
   body("status")
     .notEmpty()
+    .toLowerCase()
     .withMessage("Field yang dibutuhkan masih belum lengkap")
     .isIn(["pending", "open", "closed", "cancelled"])
     .withMessage("Status tidak valid"),
+  body("endDate")
+    .optional({ values: "falsy" })
+    .custom((value, { req }) => {
+      if (!moment(value, "YYYY-MM-DD", true).isValid()) {
+        throw new Error("Invalid end date format (YYYY-MM-DD)");
+      }
+      const tomorrow = moment().add(1, "day").startOf("day");
+      const end = moment(value, "YYYY-MM-DD");
+      if (end.isBefore(tomorrow))
+        throw new Error("Tanggal akhir minimal adalah besok atau setelahnya");
+      return true;
+    }),
+];
+
+const rescheduleJobRules = [
+  body("startDate")
+    .optional({ values: "falsy" })
+    .custom((value) => {
+      if (!moment(value, "YYYY-MM-DD", true).isValid()) {
+        throw new Error("Invalid start date format (YYYY-MM-DD)");
+      }
+      const today = moment().startOf("day");
+      const start = moment(value, "YYYY-MM-DD");
+      if (start.isBefore(today))
+        throw new Error("Start date cannot be less than today");
+      return true;
+    }),
+
+  body("endDate")
+    .optional({ values: "falsy" })
+    .custom((value, { req }) => {
+      if (!moment(value, "YYYY-MM-DD", true).isValid()) {
+        throw new Error("Invalid end date format (YYYY-MM-DD)");
+      }
+      const tomorrow = moment().add(1, "day").startOf("day");
+      const end = moment(value, "YYYY-MM-DD");
+      if (end.isBefore(tomorrow))
+        throw new Error("Tanggal akhir minimal adalah besok atau setelahnya");
+      if (req.body.startDate) {
+        const start = moment(req.body.startDate, "YYYY-MM-DD");
+        if (!end.isAfter(start))
+          throw new Error("Tanggal akhir harus setelah tanggal awal");
+      }
+      return true;
+    }),
 ];
 
 module.exports = {
@@ -326,4 +356,5 @@ module.exports = {
   addJobDisabilityRules,
   updateJobStatusRules,
   editJobRules,
+  rescheduleJobRules,
 };

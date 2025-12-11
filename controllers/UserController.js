@@ -1,4 +1,4 @@
-const { User, UserProfile, Company } = require("../models");
+const { User, UserProfile, Company, Industry } = require("../models");
 const cloudinary = require("../utils/cloudinary");
 const fs = require("fs");
 const {
@@ -49,7 +49,15 @@ exports.getUserById = async (req, res) => {
     }
 
     if (user.role === "company") {
-      company = await Company.findOne({ where: { userId } });
+      company = await Company.findOne({
+        where: { userId },
+        include: [
+          {
+            model: Industry,
+            required: false,
+          },
+        ],
+      });
 
       if (!company) {
         return res.status(404).json({
@@ -99,6 +107,7 @@ exports.getUserById = async (req, res) => {
               industryId: company.industryId,
               industryName: company.industryName,
               websiteLink: company.websiteLink,
+              Industry: company.Industry || null,
             }
           : null,
     };
@@ -155,7 +164,7 @@ exports.updateUsername = async (req, res) => {
 //update profile picture
 exports.updateProfilePicture = async (req, res) => {
   try {
-    const user = req.dbUser; 
+    const user = req.dbUser;
 
     //no file given
     if (!req.file) {

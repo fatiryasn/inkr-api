@@ -14,6 +14,9 @@ const {
   addJobDisability,
   deleteJobSkill,
   deleteJobDisability,
+  getJobs,
+  updateJobStatus,
+  rescheduleJob,
 } = require("../controllers/JobController");
 const {
   updateJobStatusRules,
@@ -21,6 +24,7 @@ const {
   addJobSkillRules,
   addJobDisabilityRules,
   editJobRules,
+  rescheduleJobRules,
 } = require("../validators/JobValidator");
 const checkJobOwner = require("../middlewares/checkJobOwner");
 
@@ -71,13 +75,15 @@ router.delete(
   deleteJobDisability
 );
 
+//get jobs
+router.get("/jobs", getJobs)
 //get job by id
 router.get("/job/:jobId", getJobById);
 //get each job skills by id
 router.get("/job/:jobId/skills", getJobSkills);
 //get each job disabilities by id
 router.get("/job/:jobId/disabilities", getJobDisabilities);
-//get 
+//get each job applications by id
 router.get("/job/:jobId/applications", getJobApplications)
 
 //apply job
@@ -93,6 +99,7 @@ router.put(
   "/job/:jobId",
   verifyToken(["company"]),
   ensureVerifiedAndActive,
+  checkJobOwner,
   editJobRules,
   validateMiddleware,
   editJob
@@ -103,8 +110,21 @@ router.patch(
   "/job/:jobId/status",
   verifyToken(["company"]),
   ensureVerifiedAndActive,
+  checkJobOwner,
   updateJobStatusRules,
-  validateMiddleware
+  validateMiddleware,
+  updateJobStatus
 );
+
+//reschedule job
+router.patch(
+  "/job/:jobId/reschedule",
+  verifyToken(["company"]),
+  ensureVerifiedAndActive,
+  checkJobOwner,
+  rescheduleJobRules,
+  validateMiddleware,
+  rescheduleJob
+)
 
 module.exports = router;

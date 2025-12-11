@@ -17,7 +17,7 @@ const Job = sequelize.define(
       allowNull: false,
     },
     description: {
-      type: DataTypes.TEXT,
+      type: DataTypes.STRING(2000),
       allowNull: false,
     },
     employmentType: {

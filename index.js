@@ -9,6 +9,7 @@ const jobSeekerRoute = require("./routes/JobSeekerRoutes")
 const userRoute = require("./routes/UserRoutes")
 const jobRoute = require('./routes/JobRoutes')
 const dataRoute = require('./routes/DataRoutes')
+const companyRoute = require('./routes/CompanyRoutes')
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -21,6 +22,7 @@ app.use("/api", userRoute);
 app.use("/api", jobSeekerRoute);
 app.use("/api", jobRoute)
 app.use("/api/data", dataRoute)
+app.use("/api", companyRoute)
 
 app.get("/", (req, res) => {
   res.send("Inklusi kerja API");
