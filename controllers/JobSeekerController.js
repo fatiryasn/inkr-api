@@ -1,4 +1,4 @@
-const { Op } = require("sequelize");
+const { Op, where, fn, col } = require("sequelize");
 const sequelize = require("../configs/database");
 const {
   UserProfile,
@@ -10,6 +10,8 @@ const {
   Skill,
   Disability,
   User,
+  JobApplication,
+  Job,
 } = require("../models");
 const { deleteUserDetail } = require("../utils/deleteUserDetails");
 
@@ -43,7 +45,7 @@ exports.jsProfileUpdate = async (req, res) => {
       "city",
       "address",
       "gender",
-      "dateOfBirth"
+      "dateOfBirth",
     ];
 
     const updatedData = {};
@@ -288,7 +290,6 @@ exports.getJsExperiences = async (req, res) => {
   }
 };
 
-
 //get job seeker skills
 exports.getJsSkills = async (req, res) => {
   try {
@@ -358,8 +359,8 @@ exports.getJsDisabilities = async (req, res) => {
       include: [
         {
           model: Disability,
-        }
-      ]
+        },
+      ],
     });
 
     const totalPages = Math.ceil(count / limit);
@@ -612,7 +613,7 @@ exports.addJsSkill = async (req, res) => {
         userId,
         skillId: finalSkillId || null,
         skillName: finalSkillName,
-        description
+        description,
       },
       { transaction: t }
     );
@@ -716,7 +717,7 @@ exports.addJsDisability = async (req, res) => {
         disabilityId: finalDisabilityId || null,
         disabilityName: finalDisabilityName,
         type: type,
-        description
+        description,
       },
       { transaction: t }
     );
@@ -805,3 +806,193 @@ exports.deleteJsDisability = async (req, res) => {
     });
   }
 };
+
+//get job seeker applications
+exports.getJsApplications = async (req, res) => {
+  try {
+    const ALLOWED_STATUS = [
+      "applied",
+      "reviewed",
+      "accepted",
+      "rejected",
+      "withdrawn",
+    ];
+    const ALLOWED_LIMITS = [30, 50, 80];
+    const SORT_OPTIONS = {
+      newest: [["appliedAt", "DESC"]],
+      oldest: [["appliedAt", "ASC"]],
+    };
+
+    // queries
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limitRequested = parseInt(
+      req.query.limit || String(ALLOWED_LIMITS[0]),
+      10
+    );
+    const limit = ALLOWED_LIMITS.includes(limitRequested)
+      ? limitRequested
+      : ALLOWED_LIMITS[0];
+    const offset = (page - 1) * limit;
+
+    const status = req.query.status ? String(req.query.status) : null;
+    const search = req.query.search ? String(req.query.search).trim() : null;
+    const sort =
+      req.query.sort && SORT_OPTIONS[req.query.sort]
+        ? req.query.sort
+        : "newest";
+
+    // validasi status
+    if (status && !ALLOWED_STATUS.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Status tidak valid. Status yang diperbolehkan: ${ALLOWED_STATUS.join(
+          ", "
+        )}`,
+      });
+    }
+
+    // application where clause
+    const applicationWhere = {
+      userId: req.user.id,
+      ...(status ? { status } : {}),
+    };
+
+    // build include
+    const includes = [
+      {
+        model: Job,
+        attributes: [
+          "id",
+          "companyId",
+          "title",
+          "description",
+          "status",
+          "startDate",
+          "endDate",
+          "employmentType",
+          "locationType",
+        ],
+        required: true,
+        include: [
+          {
+            model: Company,
+            attributes: ["id", "userId", "companyName", "country", "city"],
+            include: [
+              {
+                model: User,
+                attributes: ["id", "username", "profilePicture"],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    // search
+    if (search) {
+      const likeValue = `%${search.toLowerCase()}%`;
+      applicationWhere[Op.and] = applicationWhere[Op.and] || [];
+      applicationWhere[Op.and].push({
+        [Op.or]: [
+          where(fn("LOWER", col("Job.title")), { [Op.like]: likeValue }),
+          where(fn("LOWER", col("Job.description")), {
+            [Op.like]: likeValue,
+          }),
+          where(fn("LOWER", col("Job->Company.companyName")), {
+            [Op.like]: likeValue,
+          }),
+        ],
+      });
+    }
+
+    // gunakan findAndCountAll supaya count akurat saat include
+    const { count, rows } = await JobApplication.findAndCountAll({
+      where: applicationWhere,
+      include: includes,
+      order: SORT_OPTIONS[sort],
+      limit,
+      offset,
+      distinct: true,
+    });
+
+    const totalPages = Math.ceil(count / limit);
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil mendapatkan data aplikasi user",
+      meta: { page, limit, total: count, totalPages },
+      data: rows,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// withdraw application
+exports.withdrawApplication = async (req, res) => {
+  try {
+    const userId = Number(req.user.id);
+    const appId = Number(req.params.appId);
+
+    if (!userId || !appId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID atau Application ID tidak valid",
+      });
+    }
+
+    const application = await JobApplication.findOne({
+      where: {
+        id: appId,
+        userId: userId,
+      },
+    });
+
+    if (!application) {
+      return res.status(404).json({
+        success: false,
+        message: "Lamaran tidak ditemukan",
+      });
+    }
+
+    const currentStatus = String(application.status).toLowerCase();
+
+    //withdrawn
+    if (currentStatus === "withdrawn") {
+      return res.status(200).json({
+        success: true,
+        message: "Lamaran sudah ditarik sebelumnya",
+        data: application,
+      });
+    }
+
+    //non-withdrawn/applied
+    const forbiddenStatuses = ["reviewed", "accepted", "rejected"];
+    if (forbiddenStatuses.includes(currentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Lamaran dengan status reviewed, accepted, atau rejected tidak dapat ditarik",
+      });
+    }
+
+    // update status
+    application.status = "withdrawn";
+    await application.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Lamaran berhasil ditarik",
+      data: application,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+

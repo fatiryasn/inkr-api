@@ -24,12 +24,6 @@ const ALLOWED_DISABILITY_TYPES = [
   "multiple",
   "other",
 ];
-const ALLOWED_EMPLOYMENT_TYPES = [
-  "full-time",
-  "part-time",
-  "internship",
-  "blank",
-];
 
 /*
   JOB CREATION CONTROLS
@@ -463,7 +457,6 @@ exports.addJobDisability = async (req, res) => {
       });
     }
 
-
     const existing = await JobDisability.findOne({
       where: {
         jobId,
@@ -607,7 +600,7 @@ exports.editJob = async (req, res) => {
 //get jobs
 exports.getJobs = async (req, res) => {
   try {
-    //queries
+    // queries
     const page = Math.max(parseInt(req.query.page || "1", 10), 1);
     const limitRequested = parseInt(
       req.query.limit || String(ALLOWED_LIMITS[0]),
@@ -619,30 +612,8 @@ exports.getJobs = async (req, res) => {
     const offset = (page - 1) * limit;
 
     const search = req.query.search ? String(req.query.search).trim() : null;
-    const country = req.query.country ? String(req.query.country).trim() : null;
 
-    //employmentTypes
-    let employmentTypesParam = req.query.employmentTypes
-      ? String(req.query.employmentTypes).trim()
-      : null;
-    let employmentTypes = null;
-    if (employmentTypesParam) {
-      employmentTypes = employmentTypesParam
-        .split(",")
-        .map((v) => v.trim())
-        .filter(Boolean);
-      const invalidEmp = employmentTypes.filter(
-        (v) => !ALLOWED_EMPLOYMENT_TYPES.includes(v)
-      );
-      if (invalidEmp.length) {
-        return res.status(400).json({
-          success: false,
-          message: `Invalid employmentType values: ${invalidEmp.join(", ")}`,
-        });
-      }
-    }
-
-    //disabilityTypes
+    // disabilityTypes
     let disabilityTypesParam = req.query.disabilityTypes
       ? String(req.query.disabilityTypes).trim()
       : null;
@@ -663,118 +634,124 @@ exports.getJobs = async (req, res) => {
       }
     }
 
-    //personalized
+    // personalized
     const personalized =
       String(req.query.personalized || "false").toLowerCase() === "true";
-    //sort
-    const sort = req.query.sort === "most_popular" ? "most_popular" : "newest";
 
-    //job where clause
+    // job where clause
     const jobWhere = { status: "open" };
 
+    // search
     if (search) {
+      const likeValue = `%${search}%`;
       jobWhere[Op.or] = [
-        { title: { [Op.like]: `%${search}%` } },
-        { description: { [Op.like]: `%${search}%` } },
-      ];
-    }
-    if (employmentTypes && employmentTypes.length) {
-      jobWhere.employmentType = { [Op.in]: employmentTypes };
-    }
-
-    //company where clause
-    const companyWhere = {};
-    if (search) companyWhere.companyName = { [Op.like]: `%${search}%` };
-    if (country) companyWhere.country = country;
-
-    const companyInclude = {
-      model: Company,
-      required: Object.keys(companyWhere).length > 0,
-      where: Object.keys(companyWhere).length > 0 ? companyWhere : undefined,
-      attributes: ["id", "companyName", "country", "city"],
-    };
-    const skillInclude = {
-      model: JobSkill,
-      attributes: ["skillId", "skillName"],
-    };
-    const disabilityInclude = {
-      model: JobDisability,
-      attributes: ["disabilityId", "disabilityName"],
-    };
-    if (disabilityTypes) {
-      disabilityInclude.include = [
-        {
-          model: Disability,
-          attributes: ["id", "name", "type"],
-          where: { type: { [Op.in]: disabilityTypes } },
-        },
+        { title: { [Op.like]: likeValue } },
+        { description: { [Op.like]: likeValue } },
+        { employmentType: { [Op.like]: likeValue } },
+        { "$Company.companyName$": { [Op.like]: likeValue } },
       ];
     }
 
-    // if (disabilityTypes && disabilityTypes.length) {
-    //   disabilityInclude.required = true;
-    //   disabilityInclude.include = [
-    //     {
-    //       model: Disability,
-    //       required: true,
-    //       attributes: ["id", "name", "type"],
-    //     },
-    //   ];
-    // }
+    // --- build base includes ---
+    const includes = [
+      {
+        model: Company,
+        required: true,
+        attributes: ["id", "userId", "companyName", "country", "city"],
+        include: [
+          { model: User, attributes: ["id", "username", "profilePicture"] },
+        ],
+      },
+      {
+        model: JobSkill,
+        attributes: ["skillId", "skillName"],
+      },
+    ];
+
+    // --- handle disability filter dengan subquery ---
+    if (disabilityTypes && disabilityTypes.length > 0) {
+      // Gunakan subquery untuk filter disabilityTypes
+      const jobIdsWithDisability = await JobDisability.findAll({
+        attributes: ["jobId"],
+        include: [
+          {
+            model: Disability,
+            attributes: [],
+            where: { type: { [Op.in]: disabilityTypes } },
+          },
+        ],
+        group: ["jobId"],
+      });
+
+      const filteredJobIds = jobIdsWithDisability.map((item) => item.jobId);
+
+      // Jika tidak ada job yang memenuhi filter disability, return empty
+      if (filteredJobIds.length === 0) {
+        return res.json({
+          success: true,
+          meta: { page, limit, total: 0, totalPages: 0 },
+          data: [],
+        });
+      }
+
+      // Tambahkan filter jobId ke where clause
+      jobWhere.id = { [Op.in]: filteredJobIds };
+
+      // Untuk data, tetap include JobDisability (tanpa filter di include)
+      includes.push({
+        model: JobDisability,
+        attributes: ["disabilityId", "disabilityName", "type"],
+        include: [
+          {
+            model: Disability,
+            attributes: ["id", "name", "type"],
+          },
+        ],
+      });
+    } else {
+      // Jika tidak ada filter disability, include biasa
+      includes.push({
+        model: JobDisability,
+        attributes: ["disabilityId", "disabilityName", "type"],
+        include: [
+          {
+            model: Disability,
+            attributes: ["id", "name", "type"],
+          },
+        ],
+      });
+    }
 
     // --- collect user skill/disability ids if personalized requested ---
     let userSkillIds = [];
     let userDisabilityIds = [];
     if (personalized && req.user && req.user.id) {
       const userId = req.user.id;
-      const usrSkills = await UserSkill.findAll({
-        where: { userId },
-        attributes: ["skillId"],
-      });
-      const usrDis = await UserDisability.findAll({
-        where: { userId },
-        attributes: ["disabilityId"],
-      });
+      const [usrSkills, usrDis] = await Promise.all([
+        UserSkill.findAll({ where: { userId }, attributes: ["skillId"] }),
+        UserDisability.findAll({
+          where: { userId },
+          attributes: ["disabilityId"],
+        }),
+      ]);
       userSkillIds = usrSkills.map((r) => r.skillId);
       userDisabilityIds = usrDis.map((r) => r.disabilityId);
     }
 
-    // --- total count for pagination meta ---
-    // include company and disabilityInclude so count respects filters
-    const countIncludes = [companyInclude];
-    if (disabilityInclude.required) countIncludes.push(disabilityInclude);
-
-    const total = await Job.count({
-      where: jobWhere,
-      include: countIncludes,
-      distinct: true,
-    });
-    const totalPages = Math.ceil(total / limit);
-
-    // --- build ordering ---
-    let order = [["createdAt", "DESC"]];
-    if (sort === "most_popular") {
-      const appsCountLiteral = literal(
-        `(SELECT COUNT(*) FROM job_applications WHERE job_applications.jobId = jobs.id)`
-      );
-      order = [
-        [appsCountLiteral, "DESC"],
-        ["createdAt", "DESC"],
-      ];
-    }
-
-    // --- fetch jobs for this page ---
-    const includes = [companyInclude, skillInclude, disabilityInclude];
-
-    const jobs = await Job.findAll({
+    // --- gunakan findAndCountAll untuk konsistensi ---
+    const result = await Job.findAndCountAll({
       where: jobWhere,
       include: includes,
       limit,
       offset,
-      order,
-      distinct: true,
-      logging: console.log,
+      order: [["createdAt", "DESC"]],
+      distinct: true, // Penting untuk menghindari duplikasi
+      subQuery: false, // Untuk query yang lebih kompleks
     });
+
+    const total = result.count;
+    const jobs = result.rows;
+    const totalPages = Math.ceil(total / limit);
 
     // if not personalized or user not provided -> return plain jobs
     if (!personalized || !req.user || !req.user.id) {
@@ -785,20 +762,28 @@ exports.getJobs = async (req, res) => {
       });
     }
 
-    // --- personalized scoring for current page only ---
+    // --- personalized scoring ---
     const scored = jobs.map((job) => {
       const jobJSON = job.toJSON ? job.toJSON() : job;
-      const skillMatches = (jobJSON.skills || []).filter((s) =>
+      const skillMatches = (jobJSON.JobSkills || []).filter((s) =>
         userSkillIds.includes(s.skillId)
       ).length;
-      const disabilityMatches = (jobJSON.disabilities || []).filter((d) =>
+      const disabilityMatches = (jobJSON.JobDisabilities || []).filter((d) =>
         userDisabilityIds.includes(d.disabilityId)
       ).length;
       const score = skillMatches * 2 + disabilityMatches * 1;
-      return { ...jobJSON, score, skillMatches, disabilityMatches };
+      return {
+        ...jobJSON,
+        score,
+        skillMatches,
+        disabilityMatches,
+        // Untuk konsistensi dengan response sebelumnya
+        skills: jobJSON.JobSkills,
+        disabilities: jobJSON.JobDisabilities,
+      };
     });
 
-    // reorder the page by score desc then createdAt desc
+    // reorder by score desc then createdAt desc
     scored.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return new Date(b.createdAt) - new Date(a.createdAt);
@@ -814,6 +799,7 @@ exports.getJobs = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
 // GET /job/:jobId
 exports.getJobById = async (req, res) => {
   try {
@@ -962,6 +948,137 @@ exports.getJobApplications = async (req, res) => {
 //apply job
 exports.applyJob = async (req, res) => {
   try {
+    const userId = req.user.id;
+    const jobId = req.params.jobId;
+    const { message, portofolioLink } = req.body;
+
+    //check if job exists
+    const job = await Job.findByPk(jobId);
+    if (!job) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Pekerjaan tidak ditemukan" });
+    }
+    //check if already applied
+    const existingApplication = await JobApplication.findOne({
+      where: { userId, jobId },
+    });
+    if (existingApplication) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Tidak dapat melamar 2 kali di pekerjaan yang sama",
+        });
+    }
+    //create application
+    const application = await JobApplication.create({
+      userId,
+      jobId,
+      message: message || null,
+      portofolioLink: portofolioLink || null,
+      status: "applied",
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Berhasil melamar pekerjaan",
+      data: application,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+//update application status
+exports.updateApplicationStatus = async (req, res) => {
+  try {
+    const job = req.job;
+    if (!job) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Pekerjaan tidak ditemukan" });
+    }
+    const appId = req.params.appId;
+    const application = await JobApplication.findOne({
+      where: { id: appId, jobId: job.id },
+    });
+
+    if (!application) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Lamaran tidak ditemukan" });
+    }
+
+    const currentStatus = String(application.status || "").toLowerCase();
+    const {
+      status: requestedStatus,
+      companyMessage,
+      companyExternalLink,
+    } = req.body;
+
+    if (requestedStatus === currentStatus) {
+      return res.status(200).json({
+        success: true,
+        message: "Tidak ada perubahan status (status sama dengan sebelumnya)",
+        data: application,
+      });
+    }
+
+    //reviewed
+    if (requestedStatus === "reviewed") {
+      application.status = "reviewed";
+
+      //accepted / rejected
+    } else if (
+      requestedStatus === "accepted" ||
+      requestedStatus === "rejected"
+    ) {
+      if (currentStatus !== "reviewed") {
+        return res.status(400).json({
+          success: false,
+          message: `Transisi ke '${requestedStatus}' hanya diizinkan dari status 'reviewed'.`,
+        });
+      }
+
+      if (!companyMessage || String(companyMessage).trim() === "") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Untuk menerima/menolak lamaran, harap sertakan pesan anda untuk pelamar.",
+        });
+      }
+
+      application.status = requestedStatus;
+      application.companyMessage = String(companyMessage).trim();
+      if (companyExternalLink)
+        application.companyExternalLink = companyExternalLink;
+
+      //withdrawn
+    } else if (requestedStatus === "withdrawn") {
+      const forbidden = ["reviewed", "accepted", "rejected"];
+      if (forbidden.includes(currentStatus)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Lamaran dengan status (reviewed/accepted/rejected) tidak dapat di-withdraw.",
+        });
+      }
+
+      application.status = "withdrawn";
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Transisi status tidak diizinkan.",
+      });
+    }
+
+    await application.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Status lamaran berhasil diperbarui.",
+      data: application,
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

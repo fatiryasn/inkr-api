@@ -6,13 +6,20 @@ const {
   Job,
   JobSkill,
   JobDisability,
+  JobApplication,
+  UserProfile,
 } = require("../models");
-const { Op, fn, col, where: sequelizeWhere, literal } = require("sequelize");
-
+const {
+  Op,
+  fn,
+  col,
+  where: sequelizeWhere,
+  literal,
+  where,
+} = require("sequelize");
 
 const ALLOWED_LIMITS = [30, 50, 80];
 const ALLOWED_STATUSES = ["pending", "open", "closed", "cancelled"];
-
 
 //get companies
 exports.getCompanies = async (req, res) => {
@@ -146,10 +153,12 @@ exports.getCompanyJobs = async (req, res) => {
     const company = await Company.findOne({
       where: { userId },
       attributes: ["id", "companyName", "country", "city"],
-      include: [{
-        model: User,
-        attributes: ["id" ,"profilePicture"]
-      }]
+      include: [
+        {
+          model: User,
+          attributes: ["id", "profilePicture"],
+        },
+      ],
     });
     if (!company) {
       return res
@@ -229,7 +238,10 @@ exports.getCompanyJobs = async (req, res) => {
 
     // count of applications (literal)
     const applicationsCountLiteral = literal(
-      `(SELECT COUNT(*) FROM job_applications WHERE job_applications.jobId = Job.id)`
+      `(SELECT COUNT(*) 
+    FROM job_applications 
+    WHERE job_applications.jobId = Job.id
+    AND job_applications.status != 'withdrawn')`
     );
 
     // include di count hanya bila diperlukan (mis. filter required)
@@ -269,6 +281,148 @@ exports.getCompanyJobs = async (req, res) => {
   }
 };
 
+//get company's application
+exports.getCompanyApplication = async (req, res) => {
+  try {
+    const ALLOWED_STATUS = ["applied", "reviewed", "accepted", "rejected"];
+    const ALLOWED_LIMITS = [30, 50, 80];
+    const SORT_OPTIONS = {
+      newest: [["appliedAt", "DESC"]],
+      oldest: [["appliedAt", "ASC"]],
+    };
+
+    // queries
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limitRequested = parseInt(
+      req.query.limit || String(ALLOWED_LIMITS[0]),
+      10
+    );
+    const limit = ALLOWED_LIMITS.includes(limitRequested)
+      ? limitRequested
+      : ALLOWED_LIMITS[0];
+    const offset = (page - 1) * limit;
+
+    const status = req.query.status ? String(req.query.status) : null;
+    const search = req.query.search ? String(req.query.search).trim() : null;
+    const sort =
+      req.query.sort && SORT_OPTIONS[req.query.sort]
+        ? req.query.sort
+        : "newest";
+
+    // validasi status
+    if (status && !ALLOWED_STATUS.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Status tidak valid. Status yang diperbolehkan: ${ALLOWED_STATUS.join(
+          ", "
+        )}`,
+      });
+    }
+
+    // cari company berdasarkan userId (pemilik company)
+    const company = await Company.findOne({ where: { userId: req.user.id } });
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: "Perusahaan tidak ditemukan untuk user ini",
+      });
+    }
+
+    // build Job where: wajib companyId = company.id
+    const jobWhere = {
+      companyId: company.id,
+    };
+
+    // application where clause dasar (filter status jika ada)
+    const applicationWhere = {
+      status: {
+        [Op.ne]: "withdrawn",
+        ...(status ? { [Op.eq]: status } : {}),
+      },
+    };
+
+    const includes = [
+      {
+        model: Job,
+        attributes: [
+          "id",
+          "companyId",
+          "title",
+          "description",
+          "status",
+          "startDate",
+          "endDate",
+          "employmentType",
+          "locationType",
+        ],
+        required: true,
+        where: jobWhere,
+        include: [
+          {
+            model: Company,
+            attributes: ["id", "companyName"],
+          },
+        ],
+      },
+      {
+        model: User,
+        attributes: ["id", "username", "profilePicture", "email"],
+        required: true,
+        include: [
+          {
+            model: UserProfile,
+            attributes: ["id", "fullName"],
+          },
+        ],
+      },
+    ];
+
+    //search
+    if (search) {
+      const likeValue = `%${search.toLowerCase()}%`;
+
+      applicationWhere[Op.and] = applicationWhere[Op.and] || [];
+      applicationWhere[Op.and].push({
+        [Op.or]: [
+          where(fn("LOWER", col("Job.title")), { [Op.like]: likeValue }),
+          where(fn("LOWER", col("Job.description")), { [Op.like]: likeValue }),
+          where(fn("LOWER", col("User.username")), { [Op.like]: likeValue }),
+          where(fn("LOWER", col("User->UserProfile.fullName")), {
+            [Op.like]: likeValue,
+          }),
+        ],
+      });
+    }
+
+    const totalCount = await JobApplication.count({
+      where: applicationWhere,
+      include: includes,
+      distinct: true,
+    });
+
+    const rows = await JobApplication.findAll({
+      where: applicationWhere,
+      include: includes,
+      order: SORT_OPTIONS[sort],
+      limit,
+      offset,
+    });
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil mendapatkan data aplikasi perusahaan",
+      meta: { page, limit, total: totalCount, totalPages },
+      data: rows,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 // update company profile
 exports.cmProfileUpdate = async (req, res) => {
   const t = await sequelize.transaction();

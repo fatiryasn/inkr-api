@@ -15,6 +15,8 @@ const {
   getJsExperiences,
   getJsDisabilities,
   getJsSkills,
+  getJsApplications,
+  withdrawApplication,
 } = require("../controllers/JobSeekerController");
 const { jsProfileUpdateRules, addJsEducationRules, addJsExperienceRules, addJsSkillRules, addJsDisabilityRules } = require("../validators/JobSeekerValidator");
 const router = require("express").Router();
@@ -114,5 +116,21 @@ router.delete(
   ensureVerifiedAndActive,
   deleteJsDisability
 );
+
+//get js application
+router.get(
+  "/user/js/applications",
+  verifyToken(["job-seeker"]),
+  ensureVerifiedAndActive,
+  getJsApplications
+)
+
+//withdraw application
+router.patch(
+  "/user/js/application/:appId/withdraw",
+  verifyToken(["job-seeker"]),
+  ensureVerifiedAndActive,
+  withdrawApplication
+)
 
 module.exports = router;

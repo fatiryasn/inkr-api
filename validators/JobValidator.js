@@ -350,6 +350,39 @@ const rescheduleJobRules = [
     }),
 ];
 
+const applyJobRules = [
+  body("message")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage("Pesan terlalu panjang (max 1000 karakter)"),
+  body("portofolioLink")
+    .optional({ values: "falsy" })
+    .isLength({ max: 300 })
+    .withMessage("Link eksternal terlalu panjang (max 300 karakter)")
+    .isURL()
+    .withMessage("Format URL tidak valid"),
+];
+const updateApplicationStatusRules = [
+  body("status")
+    .notEmpty()
+    .toLowerCase()
+    .withMessage("Field yang dibutuhkan masih belum lengkap")
+    .isIn(["reviewed", "accepted", "rejected", "withdrawn"])
+    .withMessage("Status tidak valid"),
+  body("companyMessage")
+    .optional({ values: "falsy" })
+    .isLength({ max: 1000 })
+    .withMessage("Pesan terlalu panjang (max 1000 karakter)"),
+  body("companyExternalLink")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 300 })
+    .withMessage("Link eksternal terlalu panjang (max 300 karakter)")
+    .isURL()
+    .withMessage("Format URL tidak valid"),
+];
+
 module.exports = {
   addJobRules,
   addJobSkillRules,
@@ -357,4 +390,6 @@ module.exports = {
   updateJobStatusRules,
   editJobRules,
   rescheduleJobRules,
+  applyJobRules,
+  updateApplicationStatusRules,
 };

@@ -30,6 +30,22 @@ const JobApplication = sequelize.define(
       ),
       allowNull: false,
     },
+    message: {
+      type: DataTypes.STRING(1000),
+      allowNull: true,
+    },
+    portofolioLink: {
+      type: DataTypes.STRING(300),
+      allowNull: true,
+    },
+    companyMessage: {
+      type: DataTypes.STRING(1000),
+      allowNull: true,
+    },
+    companyExternalLink: {
+      type: DataTypes.STRING(300),
+      allowNull: true,
+    }, 
     appliedAt: {
       type: DataTypes.DATE,
       allowNull: false,
