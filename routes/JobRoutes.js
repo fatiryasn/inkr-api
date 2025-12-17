@@ -80,7 +80,7 @@ router.delete(
 );
 
 //get jobs
-router.get("/jobs", getJobs)
+router.get("/jobs", getJobs);
 //get job by id
 router.get("/job/:jobId", optionalAuth, getJobById);
 //get each job skills by id
@@ -88,7 +88,13 @@ router.get("/job/:jobId/skills", getJobSkills);
 //get each job disabilities by id
 router.get("/job/:jobId/disabilities", getJobDisabilities);
 //get each job applications by id
-router.get("/job/:jobId/applications", getJobApplications)
+router.get(
+  "/job/:jobId/applications",
+  verifyToken(["company"]),
+  ensureVerifiedAndActive,
+  checkJobOwner,
+  getJobApplications
+);
 
 //apply job
 router.post(
@@ -108,7 +114,7 @@ router.patch(
   updateApplicationStatusRules,
   validateMiddleware,
   updateApplicationStatus
-)
+);
 
 //edit job (company)
 router.put(
@@ -141,6 +147,6 @@ router.patch(
   rescheduleJobRules,
   validateMiddleware,
   rescheduleJob
-)
+);
 
 module.exports = router;

@@ -1,19 +1,42 @@
 const verifyToken = require("../middlewares/verifyToken");
 const validateMiddleware = require("../middlewares/validateMiddleware");
 const ensureVerifiedAndActive = require("../middlewares/ensureVerifiedAndActive");
-const { cmProfileUpdate, getCompanies, getCompanyJobs, getCompanyApplication } = require("../controllers/CompanyController");
+const {
+  cmProfileUpdate,
+  getCompanies,
+  getCompanyJobs,
+  getCompanyApplication,
+  getJsApplicationPreview,
+} = require("../controllers/CompanyController");
 const { cmProfileUpdateRules } = require("../validators/CompanyValidator");
 const router = require("express").Router();
 
-
 //get companies
-router.get('/companies', getCompanies)
+router.get("/companies", getCompanies);
 
 //get company's jobs
-router.get('/company-jobs', verifyToken(["company"]), ensureVerifiedAndActive, getCompanyJobs)
+router.get(
+  "/company-jobs",
+  verifyToken(["company"]),
+  ensureVerifiedAndActive,
+  getCompanyJobs
+);
 
 //get company's jobs
-router.get('/company-applications', verifyToken(["company"]), ensureVerifiedAndActive, getCompanyApplication)
+router.get(
+  "/company-applications",
+  verifyToken(["company"]),
+  ensureVerifiedAndActive,
+  getCompanyApplication
+);
+
+//get js application preview
+router.get(
+  "/user/cm/:jsId/js-preview-applications",
+  verifyToken(["company"]),
+  ensureVerifiedAndActive,
+  getJsApplicationPreview
+);
 
 //update company profile
 router.put(
@@ -25,4 +48,4 @@ router.put(
   cmProfileUpdate
 );
 
-module.exports = router
+module.exports = router;

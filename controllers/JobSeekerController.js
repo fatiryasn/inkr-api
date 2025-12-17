@@ -15,6 +15,122 @@ const {
 } = require("../models");
 const { deleteUserDetail } = require("../utils/deleteUserDetails");
 
+//get jobseekers
+exports.getJobSeekers = async (req, res) => {
+  try {
+    const { search, mustSearch, page = "1", limit = "30", country } = req.query;
+
+    const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+    let parsedLimit = parseInt(limit, 10) || 30;
+    const allowedLimits = [30, 50, 80];
+    if (!allowedLimits.includes(parsedLimit)) parsedLimit = 30;
+
+    const isMustSearch = mustSearch === true || mustSearch === "true";
+
+    if (isMustSearch && (!search || String(search).trim() === "")) {
+      return res.json({
+        success: true,
+        data: [],
+        meta: {
+          total: 0,
+          page: parsedPage,
+          limit: parsedLimit,
+          totalPages: 0,
+        },
+      });
+    }
+
+    // where clause
+    const jobSeekerWhere = {};
+
+    if (country && String(country).trim() !== "") {
+      jobSeekerWhere.country = String(country).trim().toLowerCase();
+    }
+
+    if (search && String(search).trim() !== "") {
+      const q = String(search).trim().toLowerCase();
+      const nameCond = where(fn("LOWER", col("UserProfile.fullName")), {
+        [Op.like]: `%${q}%`,
+      });
+      const descCond = where(fn("LOWER", col("UserProfile.bio")), {
+        [Op.like]: `%${q}%`,
+      });
+      const usernameCond = where(fn("LOWER", col("User.username")), {
+        [Op.like]: `%${q}%`,
+      });
+      jobSeekerWhere[Op.and] = [
+        {
+          [Op.or]: [nameCond, descCond, usernameCond],
+        },
+      ];
+    }
+
+    const userWhere = {
+      isVerified: true,
+      isActive: true,
+      isComplete: true,
+      role: 'job-seeker'
+    };
+
+    const offset = (parsedPage - 1) * parsedLimit;
+
+    const result = await User.findAndCountAll({
+      where: userWhere,
+      include: [
+        {
+          model: UserProfile,
+          where: jobSeekerWhere,
+          required: true,
+        },
+        {
+          model: UserDisability,
+          attributes: ["id", "disabilityName", "type"],
+          include: [
+            {
+              model: Disability,
+              attributes: ["name", "type"],
+            },
+          ],
+        },
+        {
+          model: UserSkill,
+          attributes: ["id", "skillName"],
+          include: [
+            {
+              model: Skill,
+              attributes: ["name"],
+            },
+          ],
+        },
+      ],
+      order: [["updatedAt", "DESC"]],
+      limit: parsedLimit,
+      offset,
+      distinct: true,
+    });
+
+    const total = result.count || 0;
+    const rows = result.rows || [];
+    const totalPages = parsedLimit > 0 ? Math.ceil(total / parsedLimit) : 0;
+
+    return res.json({
+      success: true,
+      data: rows,
+      meta: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
 // update job seeker profile
 exports.jsProfileUpdate = async (req, res) => {
   try {

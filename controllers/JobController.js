@@ -10,6 +10,7 @@ const {
   JobApplication,
   User,
   Industry,
+  UserProfile,
 } = require("../models");
 const sequelize = require("../configs/database");
 const { Op, literal, fn, col, where } = require("sequelize");
@@ -799,7 +800,6 @@ exports.getJobs = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
-
 // GET /job/:jobId
 exports.getJobById = async (req, res) => {
   try {
@@ -902,7 +902,6 @@ exports.getJobSkills = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 // GET /job/:jobId/disabilities
 exports.getJobDisabilities = async (req, res) => {
   try {
@@ -941,10 +940,73 @@ exports.getJobDisabilities = async (req, res) => {
 //get job applications
 exports.getJobApplications = async (req, res) => {
   try {
+    // pagination
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limitRequested = parseInt(
+      req.query.limit || String(ALLOWED_LIMITS[0]),
+      10
+    );
+    const limit = ALLOWED_LIMITS.includes(limitRequested)
+      ? limitRequested
+      : ALLOWED_LIMITS[0];
+
+    const offset = (page - 1) * limit;
+
+    // validate jobId
+    const jobId = parseInt(req.params.jobId, 10);
+    if (!jobId || Number.isNaN(jobId) || jobId <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid jobId" });
+    }
+
+    //find all
+    const { rows: applications, count: totalItems } =
+      await JobApplication.findAndCountAll({
+        where: {
+          jobId,
+          status: {
+            [Op.ne]: "withdrawn",
+          },
+        },
+        limit,
+        offset,
+        order: [["createdAt", "DESC"]],
+        include: [
+          {
+            model: User,
+            attributes: ["id", "username", "profilePicture", "email"],
+            required: true,
+            include: [
+              {
+                model: UserProfile,
+                attributes: ["id", "fullName"],
+              },
+            ],
+          },
+        ],
+        distinct: true,
+      });
+
+    const totalPages = Math.ceil(totalItems / limit);
+
+    return res.json({
+      success: true,
+      data: applications,
+      meta: {
+        page,
+        limit,
+        totalItems,
+        totalPages,
+      },
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
+
 //apply job
 exports.applyJob = async (req, res) => {
   try {
@@ -964,12 +1026,10 @@ exports.applyJob = async (req, res) => {
       where: { userId, jobId },
     });
     if (existingApplication) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Tidak dapat melamar 2 kali di pekerjaan yang sama",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Tidak dapat melamar 2 kali di pekerjaan yang sama",
+      });
     }
     //create application
     const application = await JobApplication.create({

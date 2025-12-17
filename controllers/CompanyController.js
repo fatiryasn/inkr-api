@@ -9,29 +9,12 @@ const {
   JobApplication,
   UserProfile,
 } = require("../models");
-const {
-  Op,
-  fn,
-  col,
-  where: sequelizeWhere,
-  literal,
-  where,
-} = require("sequelize");
-
-const ALLOWED_LIMITS = [30, 50, 80];
-const ALLOWED_STATUSES = ["pending", "open", "closed", "cancelled"];
+const { Op, fn, col, where, literal } = require("sequelize");
 
 //get companies
 exports.getCompanies = async (req, res) => {
   try {
-    const {
-      search,
-      mustSearch,
-      page = "1",
-      limit = "30",
-      country,
-      industryId,
-    } = req.query;
+    const { search, mustSearch, page = "1", limit = "30", country } = req.query;
 
     const parsedPage = Math.max(1, parseInt(page, 10) || 1);
     let parsedLimit = parseInt(limit, 10) || 30;
@@ -53,31 +36,31 @@ exports.getCompanies = async (req, res) => {
       });
     }
 
-    //where clause
+    // where clause
     const companyWhere = {};
 
     if (country && String(country).trim() !== "") {
-      companyWhere.country = String(country).trim();
-    }
-
-    if (industryId && !Number.isNaN(parseInt(industryId, 10))) {
-      companyWhere.industryId = parseInt(industryId, 10);
+      companyWhere.country = String(country).trim().toLowerCase();
     }
 
     if (search && String(search).trim() !== "") {
       const q = String(search).trim().toLowerCase();
-      const nameCond = sequelizeWhere(fn("LOWER", col("Company.companyName")), {
+      const nameCond = where(fn("LOWER", col("Company.companyName")), {
         [Op.like]: `%${q}%`,
       });
-      const descCond = sequelizeWhere(
-        fn("LOWER", col("Company.companyDescription")),
-        {
-          [Op.like]: `%${q}%`,
-        }
-      );
+      const descCond = where(fn("LOWER", col("Company.companyDescription")), {
+        [Op.like]: `%${q}%`,
+      });
+      const industryCond = where(fn("LOWER", col("Industry.name")), {
+        [Op.like]: `%${q}%`,
+      });
+      const industryFbCond = where(fn("LOWER", col("Company.industryName")), {
+        [Op.like]: `%${q}%`,
+      });
+
       companyWhere[Op.and] = [
         {
-          [Op.or]: [nameCond, descCond],
+          [Op.or]: [nameCond, descCond, industryCond, industryFbCond],
         },
       ];
     }
@@ -89,6 +72,8 @@ exports.getCompanies = async (req, res) => {
     };
 
     const offset = (parsedPage - 1) * parsedLimit;
+
+    const jobCountSubquery = `(SELECT COUNT(*) FROM jobs WHERE jobs.companyId = Company.id AND jobs.status = 'open')`;
 
     const result = await Company.findAndCountAll({
       where: companyWhere,
@@ -102,10 +87,12 @@ exports.getCompanies = async (req, res) => {
         {
           model: Industry,
           attributes: ["id", "name"],
-          required: false,
         },
       ],
-      order: [["companyName", "ASC"]],
+      attributes: {
+        include: [[literal(jobCountSubquery), "jobCounts"]],
+      },
+      order: [["updatedAt", "DESC"]],
       limit: parsedLimit,
       offset,
       distinct: true,
@@ -136,6 +123,9 @@ exports.getCompanies = async (req, res) => {
 //get company's job
 exports.getCompanyJobs = async (req, res) => {
   try {
+    const ALLOWED_STATUSES = ["pending", "open", "closed", "cancelled"];
+    const ALLOWED_LIMITS = [30, 50, 80];
+
     // safety check untuk req.user
     if (!req.user || !req.user.id) {
       return res
@@ -423,6 +413,79 @@ exports.getCompanyApplication = async (req, res) => {
     });
   }
 };
+
+//js application preview
+exports.getJsApplicationPreview = async (req, res) => {
+  try {
+    const jsId = parseInt(req.params.jsId, 10);
+    const userId = req.user.id;
+
+    if (!jsId || Number.isNaN(jsId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid jobseeker id",
+      });
+    }
+
+    const company = await Company.findOne({
+      where: { userId },
+      attributes: ["id", "companyName"],
+      include: [
+        {
+          model: User,
+          attributes: ["id", "profilePicture", "username"],
+        },
+      ],
+    });
+
+    if (!company) {
+      return res.status(403).json({
+        success: false,
+        message: "Company not found or unauthorized",
+      });
+    }
+
+    //find
+    const applications = await JobApplication.findAll({
+      where: {
+        userId: jsId,
+        status: { [Op.ne]: "withdrawn" },
+      },
+      attributes: ["id", "status", "appliedAt"],
+      include: [
+        {
+          model: Job,
+          where: { companyId: company.id },
+          attributes: [
+            "id",
+            "title",
+            "companyId",
+            "employmentType",
+            "locationType",
+            "status",
+          ],
+          required: true,
+        },
+      ],
+      order: [["appliedAt", "DESC"]],
+      limit: 3,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        applications,
+        company,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // update company profile
 exports.cmProfileUpdate = async (req, res) => {
   const t = await sequelize.transaction();

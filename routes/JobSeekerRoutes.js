@@ -17,11 +17,13 @@ const {
   getJsSkills,
   getJsApplications,
   withdrawApplication,
+  getJobSeekers,
 } = require("../controllers/JobSeekerController");
 const { jsProfileUpdateRules, addJsEducationRules, addJsExperienceRules, addJsSkillRules, addJsDisabilityRules } = require("../validators/JobSeekerValidator");
 const router = require("express").Router();
 
-
+//get job seekers
+router.get("/job-seekers", getJobSeekers)
 
 //get job seeker educations
 router.get("/user/js/:userId/educations", getJsEducations);
