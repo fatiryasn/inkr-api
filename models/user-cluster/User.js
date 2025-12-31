@@ -1,72 +1,61 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const User = sequelize.define(
   "User",
   {
     username: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(20),
       allowNull: false,
-      unique: true,
     },
     email: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(150),
       allowNull: false,
-      unique: true,
+      validate: {
+        isEmail: true,
+      },
     },
     password: {
       type: DataTypes.STRING,
       allowNull: true,
     },
     role: {
-      type: DataTypes.ENUM("admin", "job-seeker", "company"),
+      type: DataTypes.ENUM("super-admin", "admin", "job-seeker", "company"),
       allowNull: false,
     },
     profilePicture: {
       type: DataTypes.TEXT,
-      allowNull: true
+      allowNull: true,
     },
     authProvider: {
       type: DataTypes.ENUM("local", "google"),
       defaultValue: "local",
       allowNull: false,
     },
+    gaSecret: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     refreshToken: {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
+    accountStatus: {
+      type: DataTypes.ENUM(
+        "pending",
+        "requested",
+        "rejected",
+        "active",
+        "suspended",
+        "suspended-temp"
+      ),
       allowNull: false,
-    },
-    isVerified: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-    },
-    isComplete: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-    },
-    otpCode: {
-      type: DataTypes.STRING(6),
-      allowNull: true,
-    },
-    otpExpires: {
-      type: DataTypes.DATE,
-      allowNull: true,
+      defaultValue: "pending",
     },
   },
   {
     tableName: "users",
     timestamps: true,
-    indexes: [
-      { fields: ["createdAt"] },
-      { fields: ["role"] },
-      { fields: ["refreshToken"] },
-    ],
   }
 );
 

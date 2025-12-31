@@ -13,75 +13,79 @@ const VALID_DISABILITY_TYPES = [
 const addJobRules = [
   body("title")
     .notEmpty()
-    .withMessage("Required fields are still incomplete (title)")
-    .isLength({ max: 100 })
-    .withMessage("Title is too long (max 100 characters)"),
+    .withMessage("Field yang dibutuhkan masih belum lengkap (title)")
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Title harus berada di antara 3-100 karakter"),
 
   body("description")
     .notEmpty()
-    .withMessage("Required fields are still incomplete (description)")
+    .withMessage("Field yang dibutuhkan masih belum lengkap (description)")
     .isLength({ min: 15, max: 5000 })
-    .withMessage("Description must be in between 15-5000 characters"),
+    .withMessage("Deskripsi harus berada di antara 15-5000 karakter"),
 
   body("employmentType")
     .notEmpty()
-    .withMessage("Required fields are still incomplete (employmentType)")
+    .withMessage("Field yang dibutuhkan masih belum lengkap (employmentType)")
     .isIn(["full-time", "part-time", "internship", "blank"])
-    .withMessage("Employment type is invalid (employmentType)"),
+    .withMessage("Tipe pekerjaan invalid (employmentType)"),
 
   body("locationType")
     .notEmpty()
-    .withMessage("Required fields are still incomplete (locationType)")
+    .withMessage("Field yang dibutuhkan masih belum lengkap (locationType)")
     .isIn(["on-site", "remote", "hybrid", "blank"])
-    .withMessage("Location type is invalid (locationType)"),
+    .withMessage("Tipe lokasi invalid (locationType)"),
 
   body("address")
     .if(body("locationType").equals("on-site"))
     .notEmpty()
-    .withMessage("Address is required for on-site job.")
-    .isLength({ max: 100 })
-    .withMessage("Address is too long (max 100 characters)"),
+    .withMessage("Alamat wajib disertakan jika tipe lokasi adalah on-site")
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Alamat harus berada di antara 3-100 karakter"),
 
   body("minSalary")
     .optional({ values: "falsy" })
     .isFloat({ min: 0 })
-    .withMessage("Invalid minimum salary format"),
+    .withMessage("Nominal gaji invalid"),
 
   body("maxSalary")
     .optional({ values: "falsy" })
     .isFloat({ min: 0 })
-    .withMessage("Invalid maximum salary format")
+    .withMessage("Nominal gaji invalid")
     .custom((value, { req }) => {
       if (
         req.body.minSalary !== undefined &&
         req.body.minSalary !== "" &&
         parseFloat(value) <= parseFloat(req.body.minSalary)
       ) {
-        throw new Error("Maximum salary must be greater than minimum salary");
+        throw new Error(
+          "Maksimum gaji harus lebih besar daripada minimal gaji"
+        );
       }
       return true;
     }),
 
   body("startDate")
     .notEmpty()
-    .withMessage("Required fields are still incomplete (startDate)")
+    .withMessage("Field yang dibutuhkan masih belum lengkap (startDate)")
     .custom((value) => {
       if (!moment(value, "YYYY-MM-DD", true).isValid()) {
-        throw new Error("Invalid start date format (YYYY-MM-DD)");
+        throw new Error("Tanggal mulai invalid (YYYY-MM-DD)");
       }
       const today = moment().startOf("day");
       const start = moment(value, "YYYY-MM-DD");
       if (start.isBefore(today))
-        throw new Error("Start date cannot be less than today");
+        throw new Error(
+          "Tanggal mulai minimal adalah hari ini atau setelahnya"
+        );
       return true;
     }),
 
   body("endDate")
     .notEmpty()
-    .withMessage("Required fields are still incomplete (endDate)")
+    .withMessage("Field yang dibutuhkan masih belum lengkap (endDate)")
     .custom((value, { req }) => {
       if (!moment(value, "YYYY-MM-DD", true).isValid()) {
-        throw new Error("Invalid end date format (YYYY-MM-DD)");
+        throw new Error("Tanggal berakhir invalid (YYYY-MM-DD)");
       }
       const tomorrow = moment().add(1, "day").startOf("day");
       const end = moment(value, "YYYY-MM-DD");
@@ -98,13 +102,14 @@ const addJobRules = [
   body("skills")
     .optional({ nullable: true })
     .isArray()
-    .withMessage("Invalid skills format (Array expected)")
+    .withMessage("Skill format invalid (Array expected)")
     .bail()
     .custom((arr) => {
-      if (arr.length > 20) throw new Error("Too many skills (max 20)");
+      if (arr.length > 20)
+        throw new Error("Maksimum skill hanya bisa 20 (max 20)");
       for (const item of arr) {
         if (!item || typeof item !== "object")
-          throw new Error("Invalid skill item (Object expected)");
+          throw new Error("Skill item invalid (Object expected)");
 
         const hasId = Number.isInteger(item.id) && item.id > 0;
         const hasName =
@@ -113,21 +118,21 @@ const addJobRules = [
           String(item.name).trim() !== "";
 
         if (!hasId && !hasName) {
-          throw new Error("Each skill must have an ID or name.");
+          throw new Error("Tiap skill wajib menyertakan id atau nama");
         }
 
         if (hasId) {
           if (!Number.isInteger(item.id) || item.id <= 0) {
-            throw new Error(
-              "Invalid skill id if provided (Positive integer expected)"
-            );
+            throw new Error("Skill id invalid (Positive integer expected)");
           }
         } else {
           if (typeof item.name !== "string" || !item.name.trim()) {
-            throw new Error("Skill name is required if ID is not included");
+            throw new Error(
+              "Nama skill wajib disertakan bila tidak ada id skill"
+            );
           }
-          if (item.name.length > 100) {
-            throw new Error("Skill name is too long (max 100 karakter)");
+          if (item.name.length < 3 || item.name.length > 50) {
+            throw new Error("Nama skill harus berada di antara 3-50 karakter");
           }
         }
       }
@@ -137,14 +142,15 @@ const addJobRules = [
   body("disabilities")
     .optional({ nullable: true })
     .isArray()
-    .withMessage("Invalid disabilities format (Array expected)")
+    .withMessage("Disability format invalid (Array expected)")
     .bail()
     .custom((arr) => {
-      if (arr.length > 20) throw new Error("Too many disabilities (max 20)");
+      if (arr.length > 20)
+        throw new Error("Maksimum disabilitas hanya bisa 20 (max 20)");
 
       for (const item of arr) {
         if (!item || typeof item !== "object")
-          throw new Error("Invalid disability item (Object expected)");
+          throw new Error("Disability item invalid (Object expected)");
 
         const hasId = Number.isInteger(item.id) && item.id > 0;
         const hasName = item.name && String(item.name).trim() !== "";
@@ -154,68 +160,72 @@ const addJobRules = [
         if (hasId) {
           if (!Number.isInteger(item.id) || item.id <= 0)
             throw new Error(
-              "Invalid disability id (Positive integer expected)"
+              "Disability id invalid (Positive integer expected)"
             );
 
           continue;
         }
         //name / type given
-        if (!hasName)
-          throw new Error("Disability name is required if ID is not included");
-        if (typeof item.name !== "string" || item.name.length > 100)
-          throw new Error("Disability name invalid (max 100 chars)");
-
-        if (!hasType)
-          throw new Error("Disability type is required if ID is not included");
-        if (typeof item.type !== "string" || item.type.length > 50)
-          throw new Error("Disability type invalid (max 50 chars)");
+        if (typeof item.name !== "string" || !hasName) {
+          throw new Error(
+            "Nama disabilitas wajib disertakan bila tidak ada id disabilitas"
+          );
+        }
+        if (item.name.length < 3 || item.name.length > 50) {
+          throw new Error(
+            "Nama disabilitas harus berada di antara 3-50 karakter"
+          );
+        }
+        if (!hasType) {
+          throw new Error(
+            "Tipe disabilitas wajib disertakan bila tidak ada id disabilitas"
+          );
+        }
 
         if (!VALID_DISABILITY_TYPES.includes(item.type)) {
           throw new Error(
-            `Disability type must be one of: ${VALID_DISABILITY_TYPES.join(
+            `Tipe disabilitas invalid (valid:  ${VALID_DISABILITY_TYPES.join(
               ", "
-            )}`
+            )})`
           );
         }
       }
       return true;
     }),
 ];
-
 const addJobSkillRules = [
   body("skillId")
     .optional({ values: "falsy" })
     .isInt({ min: 1 })
-    .withMessage("Skill ID is invalid"),
+    .withMessage("ID skill invalid"),
 
   body("skillName")
     .optional({ values: "falsy" })
     .trim()
     .toLowerCase()
-    .isLength({ min: 3 })
-    .withMessage("skillName is too short (min 3 characters)"),
+    .isLength({ min: 3, max: 50 })
+    .withMessage("Nama skill harus berada di antara 3-50 karakter"),
 
   body().custom((_, { req }) => {
     const { skillId, skillName } = req.body;
     if (!skillId && !skillName) {
-      throw new Error("Required fields are still incomplete");
+      throw new Error("Field yang dibutuhkan masih belum lengkap");
     }
     return true;
   }),
 ];
-
 const addJobDisabilityRules = [
   body("disabilityId")
     .optional({ values: "falsy" })
     .isInt({ min: 1 })
-    .withMessage("Disability ID is invalid"),
+    .withMessage("ID disabilitas invalid"),
 
   body("disabilityName")
     .optional({ values: "falsy" })
     .trim()
     .toLowerCase()
-    .isLength({ min: 3 })
-    .withMessage("disabilityName is too short"),
+    .isLength({ min: 3, max: 50 })
+    .withMessage("Nama disabilitas harus berada di antara 3-50 karakter"),
 
   body("type")
     .optional({ values: "falsy" })
@@ -229,68 +239,69 @@ const addJobDisabilityRules = [
       "multiple",
       "other",
     ])
-    .withMessage("Disability type is invalid"),
+    .withMessage("Tipe disabilitas invalid"),
 
   // CUSTOM RULE
   body().custom((_, { req }) => {
     const { disabilityId, disabilityName, type } = req.body;
 
     if (!disabilityId && !disabilityName) {
-      throw new Error("Required fields are still incomplete");
+      throw new Error("Field yang dibutuhkan masih belum lengkap");
     }
 
     if (disabilityName && !type) {
-      throw new Error("Type is required for new disability name");
+      throw new Error("Tipe disabilitas wajib disertakan");
     }
 
     return true;
   }),
 ];
-
 const editJobRules = [
   body("title")
     .optional({ values: "falsy" })
-    .isLength({ max: 100 })
-    .withMessage("Title is too long (max 100 characters)"),
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Title harus berada di antara 3-100 karakter"),
 
   body("description")
     .optional({ values: "falsy" })
-    .isLength({ min: 15, max: 5000 })
-    .withMessage("Description must be in between 15-5000 characters"),
+    .isLength({ min: 15, max: 2000 })
+    .withMessage("Deskripsi harus berada di antara 15-2000"),
 
   body("employmentType")
     .optional({ values: "falsy" })
     .isIn(["full-time", "part-time", "internship", "blank"])
-    .withMessage("Employment type is invalid (employmentType)"),
+    .withMessage("Tipe pekerjaan invalid (employmentType)"),
 
   body("locationType")
     .optional({ values: "falsy" })
     .isIn(["on-site", "remote", "hybrid", "blank"])
-    .withMessage("Location type is invalid (locationType)"),
+    .withMessage("Tipe lokasi invalid (locationType)"),
 
   body("address")
     .if(body("locationType").equals("on-site"))
     .notEmpty()
-    .withMessage("Address is required for on-site job.")
-    .isLength({ max: 100 })
-    .withMessage("Address is too long (max 100 characters)"),
+    .withMessage("Alamat wajib disertakan jika tipe lokasi adalah on-site")
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Alamat harus berada di antara 3-100 karakter"),
 
   body("minSalary")
     .optional({ values: "falsy" })
     .isFloat({ min: 0 })
-    .withMessage("Invalid minimum salary format"),
+    .withMessage("Nominal gaji invalid"),
 
   body("maxSalary")
     .optional({ values: "falsy" })
     .isFloat({ min: 0 })
-    .withMessage("Invalid maximum salary format")
+    .withMessage("Nominal gaji invalid")
     .custom((value, { req }) => {
       if (
         req.body.minSalary !== undefined &&
         req.body.minSalary !== "" &&
         parseFloat(value) <= parseFloat(req.body.minSalary)
       ) {
-        throw new Error("Maximum salary must be greater than minimum salary");
+        throw new Error(
+          "Maksimum gaji harus lebih besar daripada minimal gaji"
+        );
       }
       return true;
     }),
@@ -300,14 +311,14 @@ const updateJobStatusRules = [
   body("status")
     .notEmpty()
     .toLowerCase()
-    .withMessage("Field yang dibutuhkan masih belum lengkap")
+    .withMessage("Field yang dibutuhkan masih belum lengkap (status)")
     .isIn(["pending", "open", "closed", "cancelled"])
     .withMessage("Status tidak valid"),
   body("endDate")
     .optional({ values: "falsy" })
     .custom((value, { req }) => {
       if (!moment(value, "YYYY-MM-DD", true).isValid()) {
-        throw new Error("Invalid end date format (YYYY-MM-DD)");
+        throw new Error("Tanggal berakhir invalid (YYYY-MM-DD)");
       }
       const tomorrow = moment().add(1, "day").startOf("day");
       const end = moment(value, "YYYY-MM-DD");
@@ -316,18 +327,17 @@ const updateJobStatusRules = [
       return true;
     }),
 ];
-
 const rescheduleJobRules = [
   body("startDate")
     .optional({ values: "falsy" })
     .custom((value) => {
       if (!moment(value, "YYYY-MM-DD", true).isValid()) {
-        throw new Error("Invalid start date format (YYYY-MM-DD)");
+        throw new Error("Tanggal mulai invalid (YYYY-MM-DD)");
       }
       const today = moment().startOf("day");
       const start = moment(value, "YYYY-MM-DD");
       if (start.isBefore(today))
-        throw new Error("Start date cannot be less than today");
+        throw new Error("Tanggal mulai minimal adalah hari ini atau setelahnya");
       return true;
     }),
 
@@ -335,7 +345,7 @@ const rescheduleJobRules = [
     .optional({ values: "falsy" })
     .custom((value, { req }) => {
       if (!moment(value, "YYYY-MM-DD", true).isValid()) {
-        throw new Error("Invalid end date format (YYYY-MM-DD)");
+        throw new Error("Tanggal berakhir invalid (YYYY-MM-DD)");
       }
       const tomorrow = moment().add(1, "day").startOf("day");
       const end = moment(value, "YYYY-MM-DD");
@@ -354,12 +364,12 @@ const applyJobRules = [
   body("message")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 1000 })
-    .withMessage("Pesan terlalu panjang (max 1000 karakter)"),
+    .isLength({ min: 3, max: 1000 })
+    .withMessage("Pesan harus berada di antara 3-1000 karakter"),
   body("portofolioLink")
     .optional({ values: "falsy" })
-    .isLength({ max: 300 })
-    .withMessage("Link eksternal terlalu panjang (max 300 karakter)")
+    .isLength({ min: 3, max: 300 })
+    .withMessage("Link eksternal harus berada di antara 3-300 karakter")
     .isURL()
     .withMessage("Format URL tidak valid"),
 ];
@@ -367,18 +377,18 @@ const updateApplicationStatusRules = [
   body("status")
     .notEmpty()
     .toLowerCase()
-    .withMessage("Field yang dibutuhkan masih belum lengkap")
+    .withMessage("Field yang dibutuhkan masih belum lengkap (status)")
     .isIn(["reviewed", "accepted", "rejected", "withdrawn"])
     .withMessage("Status tidak valid"),
   body("companyMessage")
     .optional({ values: "falsy" })
-    .isLength({ max: 1000 })
-    .withMessage("Pesan terlalu panjang (max 1000 karakter)"),
+    .isLength({ min: 3, max: 1000 })
+    .withMessage("Pesan harus berada di antara 3-1000 karakter"),
   body("companyExternalLink")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 300 })
-    .withMessage("Link eksternal terlalu panjang (max 300 karakter)")
+    .isLength({ min: 3, max: 300 })
+    .withMessage("Link eksternal harus berada di antara 3-300 karakter")
     .isURL()
     .withMessage("Format URL tidak valid"),
 ];

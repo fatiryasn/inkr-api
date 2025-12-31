@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const Industry = sequelize.define(
   "Industry",
@@ -7,12 +7,11 @@ const Industry = sequelize.define(
     name: {
       type: DataTypes.STRING(50),
       allowNull: false,
-      unique: true,
     },
   },
   {
     tableName: "industries",
-    indexes: [{ fields: ["name"] }],
+    timestamps: false
   }
 );
 

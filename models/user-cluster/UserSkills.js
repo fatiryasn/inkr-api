@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const UserSkill = sequelize.define(
   "UserSkill",
@@ -20,16 +20,13 @@ const UserSkill = sequelize.define(
         key: "id",
       },
     },
-    skillName: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
     description: {
       type: DataTypes.STRING(300),
-      allowNull: true
-    }
+      allowNull: true,
+    },
   },
   {
+    timestamps: false,
     tableName: "user_skills",
   }
 );

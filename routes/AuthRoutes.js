@@ -8,28 +8,40 @@ const {
   googleAuth,
   token,
   logout,
+  verifyRegistration,
+  adminLogin,
   verifyOtp,
+  setupGoogleAuth,
 } = require("../controllers/AuthController");
 const verifyToken = require("../middlewares/verifyToken");
-const { loginRules, jsRegisterRules, cmRegisterRules, verifyOtpRules, googleAuthRules, completeGoogleRules } = require("../validators/AuthValidator");
+const {
+  loginRules,
+  jsRegisterRules,
+  cmRegisterRules,
+  googleAuthRules,
+  completeGoogleRules,
+} = require("../validators/AuthValidator");
 
-
+//admin login
+router.post("/adm-login", loginRules, validateMiddleware, adminLogin);
+//verify otp admin
+router.post("/adm-verify-otp", verifyOtp);
+//setup google auth
+router.patch("/adm-setup-gauth", setupGoogleAuth);
 
 //login
 router.post("/login", loginRules, validateMiddleware, login);
 
 //job seeker register
 router.post("/js-register", jsRegisterRules, validateMiddleware, jsRegister);
-
 //company register
 router.post("/cm-register", cmRegisterRules, validateMiddleware, cmRegister);
 
-//verify otp
-router.post("/verify-otp", verifyOtpRules, validateMiddleware, verifyOtp);
+//verify registration
+router.post("/verify-registration", verifyRegistration);
 
 //google auth
 router.post("/google-auth", googleAuthRules, validateMiddleware, googleAuth);
-
 //complete google auth
 router.post(
   "/complete-google",
@@ -41,9 +53,7 @@ router.post(
 
 //token
 router.get("/token", token);
-
 //logout
 router.delete("/logout", logout);
 
-
-module.exports = router
+module.exports = router;

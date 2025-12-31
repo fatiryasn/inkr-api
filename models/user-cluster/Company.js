@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const Company = sequelize.define(
   "Company",
@@ -17,7 +17,7 @@ const Company = sequelize.define(
       allowNull: false,
     },
     companyDescription: {
-      type: DataTypes.STRING(1000),
+      type: DataTypes.STRING(2000),
       allowNull: true,
     },
     country: {
@@ -44,10 +44,6 @@ const Company = sequelize.define(
         key: "id",
       },
     },
-    industryName: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
     websiteLink : {
       type: DataTypes.STRING(300),
       allowNull: true,
@@ -55,12 +51,7 @@ const Company = sequelize.define(
   },
   {
     tableName: "companies",
-    indexes: [
-      { fields: ["companyName"] },
-      { fields: ["industryId"] },
-      { fields: ["country"] },
-      { fields: ["city"] },
-    ],
+    timestamps: false
   }
 );
 

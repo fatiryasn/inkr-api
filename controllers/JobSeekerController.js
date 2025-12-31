@@ -1,5 +1,5 @@
 const { Op, where, fn, col } = require("sequelize");
-const sequelize = require("../configs/database");
+const sequelize = require("../config/database");
 const {
   UserProfile,
   UserEducation,
@@ -66,10 +66,8 @@ exports.getJobSeekers = async (req, res) => {
     }
 
     const userWhere = {
-      isVerified: true,
-      isActive: true,
-      isComplete: true,
-      role: 'job-seeker'
+      accountStatus: "active",
+      role: "job-seeker",
     };
 
     const offset = (parsedPage - 1) * parsedLimit;
@@ -131,25 +129,16 @@ exports.getJobSeekers = async (req, res) => {
   }
 };
 
-// update job seeker profile
+// update job seeker profile (+admins)
 exports.jsProfileUpdate = async (req, res) => {
   try {
     const userId = req.user.id;
-    const user = req.dbUser;
-
-    if (user.role !== "job-seeker") {
-      return res.status(403).json({
-        success: false,
-        message: "Akses ditolak",
-      });
-    }
-
     const profile = await UserProfile.findOne({ where: { userId } });
 
     if (!profile) {
       return res.status(404).json({
         success: false,
-        message: "Profil job-seeker tidak ditemukan",
+        message: "Profil pengguna tidak ditemukan",
       });
     }
 
@@ -176,11 +165,14 @@ exports.jsProfileUpdate = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Profil berhasil diupdate",
+      message: "Profil pengguna berhasil diperbarui",
       data: profile,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -223,78 +215,20 @@ exports.getJsEducations = async (req, res) => {
       ],
     });
 
-    const institutionIds = [
-      ...new Set(rows.map((r) => r.institutionId).filter((id) => id)),
-    ];
-
-    let companiesById = {};
-    let usersById = {};
-
-    if (institutionIds.length > 0) {
-      const companies = await Company.findAll({
-        where: { id: institutionIds },
-        attributes: ["id", "companyName", "userId"],
-      });
-
-      companiesById = companies.reduce((acc, c) => {
-        acc[c.id] = c;
-        return acc;
-      }, {});
-
-      const userIds = [
-        ...new Set(companies.map((c) => c.userId).filter((id) => id)),
-      ];
-
-      if (userIds.length > 0) {
-        const users = await User.findAll({
-          where: { id: userIds },
-          attributes: ["id", "username", "profilePicture"],
-        });
-        usersById = users.reduce((acc, u) => {
-          acc[u.id] = u;
-          return acc;
-        }, {});
-      }
-    }
-
-    const enriched = rows.map((r) => {
-      const obj = r.toJSON ? r.toJSON() : { ...r };
-      if (obj.institutionId && companiesById[obj.institutionId]) {
-        const comp = companiesById[obj.institutionId];
-        const compUser = usersById[comp.userId] || null;
-        obj.institution = {
-          id: comp.id,
-          companyName: comp.companyName,
-          user: compUser
-            ? {
-                id: compUser.id,
-                username: compUser.username,
-                profilePicture: compUser.profilePicture,
-              }
-            : null,
-        };
-      }
-      return obj;
-    });
-
     const totalPages = Math.ceil(count / limit);
 
     return res.status(200).json({
       success: true,
-      message: "Berhasil mendapatkan data pendidikan user",
-      data: enriched,
-      pagination: {
-        totalData: count,
-        currentPage: page,
-        totalPages,
-        pageSize: limit,
-      },
+      data: rows,
+      meta: { page, limit, total: count, totalPages },
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
-
 // get job seeker experiences
 exports.getJsExperiences = async (req, res) => {
   try {
@@ -334,78 +268,20 @@ exports.getJsExperiences = async (req, res) => {
       ],
     });
 
-    const companyIds = [
-      ...new Set(rows.map((r) => r.companyId).filter((id) => id)),
-    ];
-
-    let companiesById = {};
-    let usersById = {};
-
-    if (companyIds.length > 0) {
-      const companies = await Company.findAll({
-        where: { id: companyIds },
-        attributes: ["id", "companyName", "userId"],
-      });
-
-      companiesById = companies.reduce((acc, c) => {
-        acc[c.id] = c;
-        return acc;
-      }, {});
-
-      const userIds = [
-        ...new Set(companies.map((c) => c.userId).filter((id) => id)),
-      ];
-
-      if (userIds.length > 0) {
-        const users = await User.findAll({
-          where: { id: userIds },
-          attributes: ["id", "username", "profilePicture"],
-        });
-        usersById = users.reduce((acc, u) => {
-          acc[u.id] = u;
-          return acc;
-        }, {});
-      }
-    }
-
-    const enriched = rows.map((r) => {
-      const obj = r.toJSON ? r.toJSON() : { ...r };
-      if (obj.companyId && companiesById[obj.companyId]) {
-        const comp = companiesById[obj.companyId];
-        const compUser = usersById[comp.userId] || null;
-        obj.company = {
-          id: comp.id,
-          companyName: comp.companyName,
-          user: compUser
-            ? {
-                id: compUser.id,
-                username: compUser.username,
-                profilePicture: compUser.profilePicture,
-              }
-            : null,
-        };
-      }
-      return obj;
-    });
-
     const totalPages = Math.ceil(count / limit);
 
     return res.status(200).json({
       success: true,
-      message: "Berhasil mendapatkan data pengalaman user",
-      data: enriched,
-      pagination: {
-        totalData: count,
-        currentPage: page,
-        totalPages,
-        pageSize: limit,
-      },
+      data: rows,
+      meta: { page, limit, total: count, totalPages },
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
-
 //get job seeker skills
 exports.getJsSkills = async (req, res) => {
   try {
@@ -428,26 +304,27 @@ exports.getJsSkills = async (req, res) => {
       limit,
       offset,
       order: [["id", "DESC"]],
+      include: [
+        {
+          model: Skill,
+        },
+      ],
     });
 
     const totalPages = Math.ceil(count / limit);
 
     return res.status(200).json({
       success: true,
-      message: "Berhasil mendapatkan data skill user",
       data: rows,
-      pagination: {
-        totalData: count,
-        currentPage: page,
-        totalPages,
-        pageSize: limit,
-      },
+      meta: { page, limit, total: count, totalPages },
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
-
 //get job seeker disabilities
 exports.getJsDisabilities = async (req, res) => {
   try {
@@ -483,17 +360,14 @@ exports.getJsDisabilities = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Berhasil mendapatkan data disabilitas user",
       data: rows,
-      pagination: {
-        totalData: count,
-        currentPage: page,
-        totalPages,
-        pageSize: limit,
-      },
+      meta: { page, limit, total: count, totalPages },
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -501,12 +375,6 @@ exports.getJsDisabilities = async (req, res) => {
 exports.addJsEducation = async (req, res) => {
   try {
     const userId = req.user.id;
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
-    }
 
     const {
       institutionId,
@@ -563,28 +431,20 @@ exports.addJsEducation = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Pendidikan berhasil ditambahkan",
+      message: "Pendidikan baru berhasil ditambahkan",
       data: newEducation,
     });
   } catch (error) {
-    console.error("addJsEducation error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
-
 // add job seeker experience
 exports.addJsExperience = async (req, res) => {
   try {
     const userId = req.user.id;
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
-    }
 
     const {
       companyId,
@@ -639,28 +499,23 @@ exports.addJsExperience = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Pengalaman user berhasil ditambahkan",
+      message: "Pengalaman baru berhasil ditambahkan",
       data: newExperience,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
-
 // add job seeker skill
 exports.addJsSkill = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const userId = req.dbUser?.id || req.user?.id;
-    if (!userId) {
-      await t.rollback();
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
+    const userId = req.user.id;
 
-    const { skillId, skillName, description } = req.body;
+    const { skillId, skillName } = req.body;
 
     let finalSkillId = null;
     let finalSkillName = null;
@@ -687,6 +542,7 @@ exports.addJsSkill = async (req, res) => {
       });
 
       if (!skill) {
+        //create to SKILL
         skill = await Skill.create(
           {
             name: skillName,
@@ -709,10 +565,7 @@ exports.addJsSkill = async (req, res) => {
     const existing = await UserSkill.findOne({
       where: {
         userId,
-        [Op.or]: [
-          finalSkillId ? { skillId: finalSkillId } : null,
-          { skillName: finalSkillName },
-        ].filter(Boolean),
+        skillId: finalSkillId,
       },
       transaction: t,
     });
@@ -724,12 +577,11 @@ exports.addJsSkill = async (req, res) => {
         .json({ success: false, message: "Skill sudah ada di profil Anda" });
     }
 
+    //create to USERSKILL
     const newUserSkill = await UserSkill.create(
       {
         userId,
-        skillId: finalSkillId || null,
-        skillName: finalSkillName,
-        description,
+        skillId: finalSkillId,
       },
       { transaction: t }
     );
@@ -738,24 +590,22 @@ exports.addJsSkill = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Skill user berhasil ditambahkan",
+      message: "Skill baru berhasil ditambahkan",
       data: newUserSkill,
     });
   } catch (error) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
-
 // add job seeker disability
 exports.addJsDisability = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const userId = req.dbUser?.id || req.user?.id;
-    if (!userId) {
-      await t.rollback();
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
+    const userId = req.user.id;
 
     const { disabilityId, disabilityName, type, description } = req.body;
 
@@ -791,8 +641,9 @@ exports.addJsDisability = async (req, res) => {
           });
         }
 
+        //create to DISABILITY
         dis = await Disability.create(
-          { name: disabilityName, type, description: null },
+          { name: disabilityName, type },
           { transaction: t }
         );
       }
@@ -811,10 +662,7 @@ exports.addJsDisability = async (req, res) => {
     const existing = await UserDisability.findOne({
       where: {
         userId,
-        [Op.or]: [
-          finalDisabilityId ? { disabilityId: finalDisabilityId } : null,
-          { disabilityName: finalDisabilityName },
-        ].filter(Boolean),
+        disabilityId: finalDisabilityId,
       },
       transaction: t,
     });
@@ -827,13 +675,11 @@ exports.addJsDisability = async (req, res) => {
       });
     }
 
+    //create to USERDISABILITY
     const newUserDisability = await UserDisability.create(
       {
         userId,
-        disabilityId: finalDisabilityId || null,
-        disabilityName: finalDisabilityName,
-        type: type,
-        description,
+        disabilityId: finalDisabilityId,
       },
       { transaction: t }
     );
@@ -842,12 +688,15 @@ exports.addJsDisability = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Disabilitas user berhasil ditambahkan",
+      message: "Disabilitas baru berhasil ditambahkan",
       data: newUserDisability,
     });
   } catch (error) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -859,16 +708,15 @@ exports.deleteJsEducation = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Education user berhasil dihapus",
+      message: "Pendidikan berhasil dihapus",
     });
   } catch (error) {
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
-
 //delete job seeker experience
 exports.deleteJsExperience = async (req, res) => {
   try {
@@ -877,16 +725,15 @@ exports.deleteJsExperience = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Experience user berhasil dihapus",
+      message: "Pengalaman berhasil dihapus",
     });
   } catch (error) {
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
-
 //delete job seeker skill
 exports.deleteJsSkill = async (req, res) => {
   try {
@@ -895,16 +742,15 @@ exports.deleteJsSkill = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Skill user berhasil dihapus",
+      message: "Skill berhasil dihapus",
     });
   } catch (error) {
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
-
 //delete job seeker disability
 exports.deleteJsDisability = async (req, res) => {
   try {
@@ -913,12 +759,12 @@ exports.deleteJsDisability = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Disabilitas user berhasil dihapus",
+      message: "Disabilitas berhasil dihapus",
     });
   } catch (error) {
     res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
@@ -961,9 +807,9 @@ exports.getJsApplications = async (req, res) => {
     if (status && !ALLOWED_STATUS.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: `Status tidak valid. Status yang diperbolehkan: ${ALLOWED_STATUS.join(
+        message: `Status lamaran invalid (valid: ${ALLOWED_STATUS.join(
           ", "
-        )}`,
+        )})`,
       });
     }
 
@@ -1021,7 +867,7 @@ exports.getJsApplications = async (req, res) => {
       });
     }
 
-    // gunakan findAndCountAll supaya count akurat saat include
+    //find
     const { count, rows } = await JobApplication.findAndCountAll({
       where: applicationWhere,
       include: includes,
@@ -1035,14 +881,13 @@ exports.getJsApplications = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Berhasil mendapatkan data aplikasi user",
       meta: { page, limit, total: count, totalPages },
       data: rows,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
@@ -1056,7 +901,7 @@ exports.withdrawApplication = async (req, res) => {
     if (!userId || !appId) {
       return res.status(400).json({
         success: false,
-        message: "User ID atau Application ID tidak valid",
+        message: "ID pengguna atau ID lamaran tidak valid",
       });
     }
 
@@ -1107,8 +952,7 @@ exports.withdrawApplication = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
-

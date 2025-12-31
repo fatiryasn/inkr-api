@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const Job = sequelize.define(
   "Job",
@@ -12,6 +12,7 @@ const Job = sequelize.define(
         key: "id",
       },
     },
+
     title: {
       type: DataTypes.STRING(100),
       allowNull: false,
@@ -20,6 +21,7 @@ const Job = sequelize.define(
       type: DataTypes.STRING(2000),
       allowNull: false,
     },
+    
     employmentType: {
       type: DataTypes.ENUM("full-time", "part-time", "internship", "blank"),
       allowNull: false,
@@ -28,10 +30,20 @@ const Job = sequelize.define(
       type: DataTypes.ENUM("on-site", "remote", "hybrid", "blank"),
       allowNull: false,
     },
+
+    country: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    city: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     address: {
       type: DataTypes.STRING(100),
       allowNull: true,
     },
+
     minSalary: {
       type: DataTypes.DECIMAL(15, 2),
       allowNull: true,
@@ -40,6 +52,7 @@ const Job = sequelize.define(
       type: DataTypes.DECIMAL(15, 2),
       allowNull: true,
     },
+
     startDate: {
       type: DataTypes.DATEONLY,
       allowNull: false,
@@ -48,6 +61,7 @@ const Job = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: false,
     },
+
     status: {
       type: DataTypes.ENUM("pending", "open", "closed", "cancelled"),
       defaultValue: "pending",
@@ -57,12 +71,6 @@ const Job = sequelize.define(
   {
     tableName: "jobs",
     timestamps: true,
-    indexes: [
-      { fields: ["title"] },
-      { fields: ["status"] },
-      { fields: ["companyId"] },
-      { fields: ["employmentType", "locationType", "status"] },
-    ],
   }
 );
 

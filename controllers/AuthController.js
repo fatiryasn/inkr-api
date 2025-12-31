@@ -1,12 +1,247 @@
+const { Op } = require("sequelize");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
+const speakeasy = require("speakeasy");
+const qrcode = require("qrcode");
+const {
+  User,
+  UserProfile,
+  Company,
+  Industry,
+  RegisterRequest,
+} = require("../models");
+const sequelize = require("../config/database");
 const { createAccessToken, createRefreshToken } = require("../utils/tokens");
-const { generateOtp } = require("../utils/generateOtp");
-const { User, UserProfile, Company, Industry } = require("../models");
-const sequelize = require("../configs/database");
-const createTransporter = require("../configs/mailer");
+const { sendVerificationLink } = require("../utils/sendVerificationLink");
 
+/*
+  ADMIN AUTH  
+*/
+//admin login
+exports.adminLogin = async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({
+      where: {
+        email,
+        role: ["admin", "super-admin"],
+      },
+    });
+    if (!user) {
+      return res.status(400).json({ message: "Email atau password salah" });
+    }
+    if (!user.password) {
+      return res.status(400).json({ message: "Email atau password salah" });
+    }
+    if (user.accountStatus !== "active") {
+      switch (user.accountStatus) {
+        case "pending":
+          message = "Akun belum diverifikasi";
+          break;
+        case "requested":
+          message = "Akun sedang menunggu persetujuan admin";
+          break;
+        case "rejected":
+          message = "Akun ditolak oleh admin";
+          break;
+        case "suspended":
+          message = "Akun telah disuspend";
+          break;
+        case "suspended-temp":
+          message = "Akun disuspend sementara";
+          break;
+      }
+
+      return res.status(403).json({
+        success: false,
+        message,
+      });
+    }
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ message: "Email atau password salah" });
+    }
+
+    const verifyToken = jwt.sign(
+      { userId: user.id, action: "admin-login" },
+      process.env.VERIFY_TOKEN_SECRET,
+      { expiresIn: "24h" }
+    );
+
+    return res.json({
+      success: true,
+      message: "Login berhasil, hanya perlu verifikasi OTP",
+      data: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        authProvider: user.authProvider,
+        profilePicture: user.profilePicture,
+        hasGaSecret: !!user.gaSecret,
+      },
+      verifyToken,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+//verify otp login gauth (admin)
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { otp } = req.body;
+    const verifyToken = req.headers.authorization?.split(" ")[1];
+
+    if (!verifyToken)
+      return res
+        .status(401)
+        .json({ success: false, message: "Token tidak ditemukan" });
+
+    let payload;
+    try {
+      payload = jwt.verify(verifyToken, process.env.VERIFY_TOKEN_SECRET);
+    } catch (err) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token tidak valid atau kadaluarsa" });
+    }
+    if (payload.action !== "admin-login") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token tidak valid atau kadaluarsa" });
+    }
+
+    const user = await User.findByPk(payload.userId);
+    if (!user || !["admin", "super-admin"].includes(user.role)) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Akun tidak ditemukan" });
+    }
+
+    if (!user.gaSecret) {
+      return res.status(400).json({
+        success: false,
+        message: "Google Authenticator belum disetup",
+      });
+    }
+
+    //verify otp
+    const verified = speakeasy.totp.verify({
+      secret: user.gaSecret,
+      encoding: "base32",
+      token: otp,
+      window: 1,
+    });
+    if (!verified) {
+      return res
+        .status(401)
+        .json({ success: false, message: "OTP tidak valid" });
+    }
+
+    const accessToken = createAccessToken(user);
+    const refreshToken = createRefreshToken(user, "5h");
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 5 * 60 * 60 * 1000,
+    });
+
+    return res.json({
+      success: true,
+      message: "Login berhasil",
+      data: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        authProvider: user.authProvider,
+        profilePicture: user.profilePicture,
+      },
+      accessToken,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+//setup google auth (admin)
+exports.setupGoogleAuth = async (req, res) => {
+  try {
+    const verifyToken = req.headers.authorization?.split(" ")[1];
+    if (!verifyToken) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Token tidak ditemukan" });
+    }
+
+    //token validation
+    let payload;
+    try {
+      payload = jwt.verify(verifyToken, process.env.VERIFY_TOKEN_SECRET);
+    } catch (err) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token tidak valid atau kadaluarsa" });
+    }
+    if (payload.action !== "admin-login") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token tidak valid atau kadaluarsa" });
+    }
+
+    //user validation
+    const user = await User.findByPk(payload.userId);
+    if (!user || !["admin", "super-admin"].includes(user.role)) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Akun tidak ditemukan" });
+    }
+    if (user.gaSecret) {
+      return res.status(400).json({
+        success: false,
+        message: "Google Authenticator sudah disetup",
+      });
+    }
+
+    //gauth secret key
+    const secret = speakeasy.generateSecret({
+      name: `InklusiKerja - Admin (${user.email})`,
+    });
+
+    user.gaSecret = secret.base32;
+    await user.save();
+
+    //qrcode creation
+    const qrDataUrl = await qrcode.toDataURL(secret.otpauth_url);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Google Authenticator berhasil disetup, login ulang untuk melanjutkan",
+      data: qrDataUrl,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
+  }
+};
+
+/*
+  COMMON REGISTER
+*/
 //login
 exports.login = async (req, res) => {
   try {
@@ -14,27 +249,61 @@ exports.login = async (req, res) => {
 
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Email atau password salah" });
-    }
-    if (user.isActive === false || user.isVerified === false) {
-      return res.status(403).json({
+      return res.status(401).json({
         success: false,
-        message: "Akun ini tidak aktif, tidak dapat login dengan akun ini.",
+        message: "Email atau password salah",
       });
     }
+
+    //check auth provider
     if (user.authProvider !== "local") {
-      return res
-        .status(401)
-        .json({ success: false, message: "Kredensial autentikasi invalid" });
+      return res.status(401).json({
+        success: false,
+        message: "Akun ini terdaftar menggunakan login Google",
+      });
     }
 
+    //account status
+    if (user.accountStatus !== "active") {
+      let message = "Akun tidak dapat login";
+
+      switch (user.accountStatus) {
+        case "pending":
+          message = "Akun belum diverifikasi";
+          break;
+        case "requested":
+          message = "Akun sedang menunggu persetujuan admin";
+          break;
+        case "rejected":
+          message = "Akun ditolak oleh admin";
+          break;
+        case "suspended":
+          message = "Akun telah disuspend";
+          break;
+        case "suspended-temp":
+          message = "Akun disuspend sementara";
+          break;
+      }
+
+      return res.status(403).json({
+        success: false,
+        message,
+      });
+    }
+
+    //password check
+    if (!user.password) {
+      return res.status(401).json({
+        success: false,
+        message: "Password tidak tersedia untuk akun ini",
+      });
+    }
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email atau password salah" });
+      return res.status(401).json({
+        success: false,
+        message: "Email atau password salah",
+      });
     }
 
     //token
@@ -48,27 +317,30 @@ exports.login = async (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: "none",
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: "Login berhasil",
       data: {
         id: user.id,
-        name: user.name,
+        username: user.username,
         email: user.email,
-        authProvider: user.authProvider,
         role: user.role,
+        authProvider: user.authProvider,
+        profilePicture: user.profilePicture,
       },
       accessToken,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
-
-// job seeker register
+//job seeker register
 exports.jsRegister = async (req, res) => {
   const t = await sequelize.transaction();
 
@@ -76,143 +348,70 @@ exports.jsRegister = async (req, res) => {
     const { username, email, password, fullName, country, city, gender } =
       req.body;
 
-    const existingByUsername = await User.findOne({
-      where: { username },
-      transaction: t,
-    });
-    const existingByEmail = await User.findOne({
-      where: { email },
+    //conflict check
+    const existingUser = await User.findOne({
+      where: {
+        [Op.or]: [{ username }, { email }],
+      },
       transaction: t,
     });
 
-    if (
-      existingByUsername &&
-      existingByEmail &&
-      existingByUsername.id !== existingByEmail.id
-    ) {
+    if (existingUser) {
       await t.rollback();
       return res.status(409).json({
         success: false,
-        message: "Username atau email sudah digunakan.",
+        message: "Username atau email sudah terdaftar.",
       });
     }
 
-    if (
-      (existingByUsername && existingByUsername.isVerified) ||
-      (existingByEmail && existingByEmail.isVerified)
-    ) {
-      await t.rollback();
-      return res.status(409).json({
-        success: false,
-        message: "Username atau email sudah digunakan.",
-      });
-    }
+    // hashing password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    // generate OTP
-    const { otp, otpExpires } = generateOtp();
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    let user;
-    if (existingByEmail || existingByUsername) {
-      user = existingByEmail || existingByUsername;
-      await user.update(
-        {
-          username,
-          email,
-          password: hashedPassword,
-          role: "job-seeker",
-          authProvider: "local",
-          isComplete: true,
-          isVerified: false,
-          isActive: false,
-          otpCode: otp,
-          otpExpires,
-        },
-        { transaction: t }
-      );
-
-      const profile = await UserProfile.findOne({
-        where: { userId: user.id },
-        transaction: t,
-      });
-      if (profile) {
-        await profile.update(
-          { fullName, country, city, gender },
-          { transaction: t }
-        );
-      } else {
-        await UserProfile.create(
-          {
-            userId: user.id,
-            fullName,
-            country,
-            city,
-            gender,
-          },
-          { transaction: t }
-        );
-      }
-    } else {
-      user = await User.create(
-        {
-          username,
-          email,
-          password: hashedPassword,
-          role: "job-seeker",
-          authProvider: "local",
-          isComplete: true,
-          isVerified: false,
-          isActive: false,
-          otpCode: otp,
-          otpExpires,
-        },
-        { transaction: t }
-      );
-
-      await UserProfile.create(
-        {
-          userId: user.id,
-          fullName,
-          country,
-          city,
-          gender,
-        },
-        { transaction: t }
-      );
-    }
+    //user creation
+    const user = await User.create(
+      {
+        username,
+        email,
+        password: hashedPassword,
+        role: "job-seeker",
+        authProvider: "local",
+        accountStatus: "pending",
+      },
+      { transaction: t }
+    );
+    await UserProfile.create(
+      {
+        userId: user.id,
+        fullName,
+        country,
+        city,
+        gender,
+      },
+      { transaction: t }
+    );
 
     await t.commit();
 
-    const transporter = await createTransporter();
-    const info = await transporter.sendMail({
-      from: `"Inklusi Kerja" <${transporter.options.auth.user}>`,
-      to: email,
-      subject: "Verifikasi Akun Kamu",
-      html: `
-        <h3>Kode verifikasi akun kamu:</h3>
-        <h2>${otp}</h2>
-        <p>Kode ini berlaku selama 15 menit.</p>
-      `,
-    });
+    // send verification email
+    const verifyToken = jwt.sign(
+      { userId: user.id, action: "request-approval" },
+      process.env.VERIFY_TOKEN_SECRET,
+      { expiresIn: "24h" }
+    );
 
-    console.log("📧 Email preview:", nodemailer.getTestMessageUrl(info));
+    sendVerificationLink({
+      to: user.email,
+      username: user.username,
+      verifyToken,
+    }).catch((err) => console.error("Email error:", err));
 
     return res.status(201).json({
       success: true,
-      message: "Akun berhasil dibuat, hanya perlu verifikasi otp",
-      data: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        authProvider: user.authProvider,
-      },
-      emailTemp: nodemailer.getTestMessageUrl(info)
+      message: "Akun dibuat. Silakan cek email untuk verifikasi.",
     });
   } catch (error) {
     if (t.finished !== "commit") await t.rollback();
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };
 
@@ -229,42 +428,26 @@ exports.cmRegister = async (req, res) => {
       city,
       industryId,
       industryName,
-      websiteLink
+      websiteLink,
     } = req.body;
 
-    const existingByUsername = await User.findOne({
-      where: { username },
-      transaction: t,
-    });
-    const existingByEmail = await User.findOne({
-      where: { email },
+    // conflict check
+    const existingUser = await User.findOne({
+      where: {
+        [Op.or]: [{ username }, { email }],
+      },
       transaction: t,
     });
 
-    if (
-      existingByUsername &&
-      existingByEmail &&
-      existingByUsername.id !== existingByEmail.id
-    ) {
+    if (existingUser) {
       await t.rollback();
       return res.status(409).json({
         success: false,
-        message: "Username atau email sudah digunakan.",
+        message: "Username atau email sudah terdaftar.",
       });
     }
 
-    if (
-      (existingByUsername && existingByUsername.isVerified) ||
-      (existingByEmail && existingByEmail.isVerified)
-    ) {
-      await t.rollback();
-      return res.status(409).json({
-        success: false,
-        message: "Username atau email sudah digunakan.",
-      });
-    }
-
-    //industry type check
+    // industry type check
     let finalIndustry = null;
     if (industryId) {
       const existingIndustry = await Industry.findByPk(industryId, {
@@ -299,164 +482,127 @@ exports.cmRegister = async (req, res) => {
       });
     }
 
-    //generate OTP
-    const { otp, otpExpires } = generateOtp();
+    // hashing password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    let user;
-    if (existingByEmail || existingByUsername) {
-      user = existingByEmail || existingByUsername;
-      await user.update(
-        {
-          username,
-          email,
-          password: hashedPassword,
-          role: "company",
-          authProvider: "local",
-          isComplete: true,
-          isActive: false,
-          isVerified: false,
-          otpCode: otp,
-          otpExpires,
-        },
-        { transaction: t }
-      );
+    // create new user + company
+    const user = await User.create(
+      {
+        username,
+        email,
+        password: hashedPassword,
+        role: "company",
+        authProvider: "local",
+        accountStatus: "pending",
+      },
+      { transaction: t }
+    );
 
-      const company = await Company.findOne({
-        where: { userId: user.id },
-        transaction: t,
-      });
-      if (company) {
-        await company.update(
-          {
-            companyName,
-            country,
-            city,
-            industryId: finalIndustry.id,
-            industryName: finalIndustry.name,
-          },
-          { transaction: t }
-        );
-      } else {
-        await Company.create(
-          {
-            userId: user.id,
-            companyName,
-            country,
-            city,
-            industryId: finalIndustry.id,
-            industryName: finalIndustry.name,
-          },
-          { transaction: t }
-        );
-      }
-    } else {
-      user = await User.create(
-        {
-          username,
-          email,
-          password: hashedPassword,
-          role: "company",
-          authProvider: "local",
-          isComplete: true,
-          isVerified: false,
-          isActive: false,
-          otpCode: otp,
-          otpExpires,
-        },
-        { transaction: t }
-      );
-
-      await Company.create(
-        {
-          userId: user.id,
-          companyName,
-          country,
-          city,
-          industryId: finalIndustry.id,
-          industryName: finalIndustry.name,
-          websiteLink
-        },
-        { transaction: t }
-      );
-    }
+    await Company.create(
+      {
+        userId: user.id,
+        companyName,
+        country,
+        city,
+        industryId: finalIndustry.id,
+        websiteLink,
+      },
+      { transaction: t }
+    );
 
     await t.commit();
 
-    const transporter = await createTransporter();
-    const info = await transporter.sendMail({
-      from: `"Inklusi Kerja" <${transporter.options.auth.user}>`,
-      to: email,
-      subject: "Verifikasi Akun Kamu",
-      html: `
-        <h3>Kode verifikasi akun kamu:</h3>
-        <h2>${otp}</h2>
-        <p>Kode ini berlaku selama 15 menit.</p>
-      `,
-    });
+    //send verification email
+    const verifyToken = jwt.sign(
+      { userId: user.id, action: "request-approval" },
+      process.env.VERIFY_TOKEN_SECRET,
+      { expiresIn: "24h" }
+    );
 
-    console.log("📧 Email preview:", nodemailer.getTestMessageUrl(info));
+    sendVerificationLink({
+      to: user.email,
+      username: user.username,
+      verifyToken,
+    }).catch((err) => console.error("Email error:", err));
 
     return res.status(201).json({
       success: true,
-      message: "Akun berhasil dibuat, hanya perlu verifikasi otp",
-      data: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        authProvider: user.authProvider,
-      },
-      emailTemp: nodemailer.getTestMessageUrl(info),
+      message: "Akun dibuat. Silakan cek email untuk verifikasi.",
     });
   } catch (error) {
     if (t.finished !== "commit") await t.rollback();
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };
 
-//verify otp
-exports.verifyOtp = async (req, res) => {
+//verify registration
+exports.verifyRegistration = async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const { token } = req.query;
+    if (!token) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token tidak ditemukan" });
+    }
 
-    const user = await User.findOne({ where: { email } });
-    if (!user)
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.VERIFY_TOKEN_SECRET);
+    } catch (err) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token tidak valid atau kadaluarsa" });
+    }
+    if (payload.action !== "request-approval") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token tidak valid atau kadaluarsa" });
+    }
+
+    const user = await User.findByPk(payload.userId);
+    if (!user) {
       return res
         .status(404)
         .json({ success: false, message: "User tidak ditemukan" });
+    }
 
-    if (user.isActive || user.isVerified)
-      return res
-        .status(400)
-        .json({ success: false, message: "Akun sudah aktif" });
+    //prevent double request
+    const existingRequest = await RegisterRequest.findOne({
+      where: {
+        userId: user.id,
+        status: "pending",
+      },
+    });
+    if (existingRequest) {
+      return res.status(409).json({
+        success: false,
+        message: "Permintaan persetujuan sudah pernah diajukan",
+      });
+    }
 
-    if (user.otpCode !== otp)
-      return res
-        .status(400)
-        .json({ success: false, message: "Kode OTP salah" });
-
-    if (user.otpExpires < new Date())
-      return res
-        .status(400)
-        .json({ success: false, message: "Kode OTP sudah kedaluwarsa" });
-
-    user.isActive = true;
-    user.isVerified = true;
-    user.otpCode = null;
-    user.otpExpires = null;
+    // update status akun
+    user.accountStatus = "requested";
     await user.save();
 
-    return res.status(200).json({
+    await RegisterRequest.create({
+      userId: user.id,
+      status: "pending",
+    });
+
+    return res.json({
       success: true,
-      message: "Verifikasi berhasil, hanya perlu login untuk melanjutkan",
+      message:
+        "Email terverifikasi. Permintaan persetujuan berhasil dikirim ke admin.",
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
+/*
+  GOOGLE AUTH
+*/
 //google auth
 exports.googleAuth = async (req, res) => {
   const t = await sequelize.transaction();
@@ -543,7 +689,7 @@ exports.googleAuth = async (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: "none",
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(201).json({
@@ -559,7 +705,7 @@ exports.googleAuth = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };
 
@@ -617,21 +763,10 @@ exports.completeGoogleAuth = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message || "Internal server error"});
   }
 };
 
-// //me
-// exports.me = async (req, res) => {
-//   try {
-//     const userId = req.user.id;
-//     const user = await User.findByPk(userId, {
-//       attributes: { exclude: ["password", "refreshToken", "otpCode", "otpExpires"] },
-//     });
-//   } catch (error) {
-//     return res.status(500).json({ success: false, message: error.message });
-//   }
-// };
 
 //token
 exports.token = async (req, res) => {
@@ -652,10 +787,9 @@ exports.token = async (req, res) => {
       }
     );
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };
-
 //logout
 exports.logout = async (req, res) => {
   const refreshToken = req.cookies.refreshToken;
@@ -676,6 +810,6 @@ exports.logout = async (req, res) => {
     res.clearCookie("refreshToken");
     return res.status(200).json({ success: true, message: "Logout berhasil" });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };

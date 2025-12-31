@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const UserExperience = sequelize.define(
   "UserExperience",
@@ -54,8 +54,8 @@ const UserExperience = sequelize.define(
     },
   },
   {
+    timestamps: false,
     tableName: "user_experiences",
-    indexes: [{ fields: ["companyName"] }],
   }
 );
 

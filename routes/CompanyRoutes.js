@@ -16,15 +16,14 @@ router.get("/companies", getCompanies);
 
 //get company's jobs
 router.get(
-  "/company-jobs",
+  "/user/cm/jobs",
   verifyToken(["company"]),
   ensureVerifiedAndActive,
   getCompanyJobs
 );
-
-//get company's jobs
+//get company's applications
 router.get(
-  "/company-applications",
+  "user/cm/applications",
   verifyToken(["company"]),
   ensureVerifiedAndActive,
   getCompanyApplication

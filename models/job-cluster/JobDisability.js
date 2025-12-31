@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const JobDisability = sequelize.define(
   "JobDisability",
@@ -20,23 +20,9 @@ const JobDisability = sequelize.define(
         key: "id",
       },
     },
-    disabilityName: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    type: {
-      type: DataTypes.ENUM(
-        "sensory",
-        "intellectual",
-        "mental",
-        "physical",
-        "multiple",
-        "other"
-      ),
-      allowNull: false,
-    },
   },
   {
+    timestamps: false,
     tableName: "job_disabilities",
   }
 );

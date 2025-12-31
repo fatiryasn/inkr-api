@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const JobApplication = sequelize.define(
   "JobApplication",
@@ -20,6 +20,13 @@ const JobApplication = sequelize.define(
         key: "id",
       },
     },
+    email: {
+      type: DataTypes.STRING(150),
+      allowNull: false,
+      validate: {
+        isEmail: true,
+      },
+    },
     status: {
       type: DataTypes.ENUM(
         "applied",
@@ -29,6 +36,7 @@ const JobApplication = sequelize.define(
         "withdrawn"
       ),
       allowNull: false,
+      defaultValue: "applied"
     },
     message: {
       type: DataTypes.STRING(1000),
@@ -45,25 +53,11 @@ const JobApplication = sequelize.define(
     companyExternalLink: {
       type: DataTypes.STRING(300),
       allowNull: true,
-    }, 
-    appliedAt: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
     },
   },
   {
     tableName: "job_applications",
-    indexes: [
-      { fields: ["jobId"] },
-      { fields: ["userId"] },
-      { fields: ["status"] },
-    ],
-    uniqueKeys: {
-      unique_user_job: {
-        fields: ["jobId", "userId"],
-      },
-    },
+    timestamps: true
   }
 );
 

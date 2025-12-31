@@ -4,8 +4,8 @@ const jsProfileUpdateRules = [
   body("fullName")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 100 })
-    .withMessage("Nama terlalu panjang (max 100 karakter)"),
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Nama harus berada di antara 3-100 karakter"),
   body("phoneNumber")
     .optional({ values: "falsy" })
     .trim()
@@ -14,15 +14,15 @@ const jsProfileUpdateRules = [
   body("bio")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 500 })
-    .withMessage("Bio terlalu panjang (max 500 karakter)"),
-  body("country").optional({ values: "falsy" }).trim(),
-  body("city").optional({ values: "falsy" }).trim(),
+    .isLength({ min: 3, max: 1000 })
+    .withMessage("Bio harus berada di antara 3-1000 karakter"),
+  body("country").optional({ values: "falsy" }).trim().toLowerCase(),
+  body("city").optional({ values: "falsy" }).trim().toLowerCase(),
   body("address")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ max: 100 })
-    .withMessage("Alamat terlalu panjang (max 100 karakter)"),
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Alamat harus berada diantara 3-100 karakter"),
   body("gender")
     .optional({ values: "falsy" })
     .isIn(["male", "female", "blank"])
@@ -42,18 +42,18 @@ const addJsEducationRules = [
   body("institutionName")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ min: 3 })
-    .withMessage("Nama institut minimal 3 karakter"),
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Nama institut harus berada di antara 3-100 karakter"),
 
   body("fieldOfStudy")
     .notEmpty()
     .trim()
-    .withMessage("Field yang dibutuhkan masih belum lengkap"),
+    .withMessage("Field yang dibutuhkan masih belum lengkap (fieldOfStudy)"),
 
   body("degree")
     .notEmpty()
     .trim()
-    .withMessage("Field yang dibutuhkan masih belum lengkap"),
+    .withMessage("Field yang dibutuhkan masih belum lengkap (degree)"),
 
   body("score")
     .optional({ values: "falsy" })
@@ -66,7 +66,7 @@ const addJsEducationRules = [
 
   body("startDate")
     .notEmpty()
-    .withMessage("Field yang dibutuhkan masih belum lengkap")
+    .withMessage("Field yang dibutuhkan masih belum lengkap (startDate)")
     .isISO8601()
     .withMessage("Format tanggal tidak valid"),
 
@@ -77,10 +77,8 @@ const addJsEducationRules = [
 
   body("description")
     .optional({ values: "falsy" })
-    .isLength({ min: 3 })
-    .withMessage("Deskripsi terlalu pendek (min 3 karakter)")
-    .isLength({ max: 300 })
-    .withMessage("Deskripsi terlalu panjang (max 300 karakter)"),
+    .isLength({ min: 3, max: 300 })
+    .withMessage("Deskripsi harus berada di antara 3-300 karakter"),
 
   body().custom((_, { req }) => {
     const { institutionId, institutionName, startDate, endDate } = req.body;
@@ -92,13 +90,12 @@ const addJsEducationRules = [
       throw new Error("Institusi invalid");
     }
     if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
-      throw new Error("Tanggal selesai tidak boleh sebelum tanggal mulai");
+      throw new Error("Tanggal selesai harus setelah tanggal mulai");
     }
 
     return true;
   }),
 ];
-
 const addJsExperienceRules = [
   body("companyId")
     .optional({ values: "falsy" })
@@ -108,8 +105,8 @@ const addJsExperienceRules = [
   body("companyName")
     .optional({ values: "falsy" })
     .trim()
-    .isLength({ min: 3 })
-    .withMessage("Nama perusahaan minimal 3 karakter"),
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Nama perusahaan harus berada di antara 3-100 karakter"),
 
   body("experienceType")
     .notEmpty()
@@ -135,10 +132,8 @@ const addJsExperienceRules = [
 
   body("description")
     .optional({ values: "falsy" })
-    .isLength({ min: 3 })
-    .withMessage("Deskripsi terlalu pendek (min 3 karakter)")
-    .isLength({ max: 300 })
-    .withMessage("Deskripsi terlalu panjang (max 300 karakter)"),
+    .isLength({ min: 3, max: 300 })
+    .withMessage("Deskripsi harus berada di antara 3-300 karakter"),
 
   body().custom((_, { req }) => {
     const { companyId, companyName, startDate, endDate } = req.body;
@@ -150,13 +145,12 @@ const addJsExperienceRules = [
       throw new Error("Perusahaan invalid");
     }
     if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
-      throw new Error("Tanggal selesai tidak boleh sebelum tanggal mulai");
+      throw new Error("Tanggal selesai harus setelah tanggal mulai");
     }
 
     return true;
   }),
 ];
-
 const addJsSkillRules = [
   body("skillId")
     .optional({ values: "falsy" })
@@ -167,15 +161,14 @@ const addJsSkillRules = [
     .optional({ values: "falsy" })
     .trim()
     .toLowerCase()
-    .isLength({ min: 3 })
-    .withMessage("Nama skill minimal 3 karakter"),
+    .isLength({ min: 3, max: 50 })
+    .withMessage("Nama skill harus berada di antara 3-50 karakter"),
 
   body("description")
     .optional({ values: "falsy" })
-    .isLength({ min: 3 })
-    .withMessage("Deskripsi terlalu pendek (min 3 karakter)")
-    .isLength({ max: 300 })
-    .withMessage("Deskripsi terlalu panjang (max 300 karakter)"),
+    .trim()
+    .isLength({ min: 3, max: 300 })
+    .withMessage("Deskripsi harus berada di antara 3-300 karakter"),
 
   body().custom((_, { req }) => {
     const { skillId, skillName } = req.body;
@@ -188,7 +181,6 @@ const addJsSkillRules = [
     return true;
   }),
 ];
-
 const addJsDisabilityRules = [
   body("disabilityId")
     .optional({ values: "falsy" })
@@ -199,8 +191,8 @@ const addJsDisabilityRules = [
     .optional({ values: "falsy" })
     .trim()
     .toLowerCase()
-    .isLength({ min: 3 })
-    .withMessage("Nama disabilitas terlalu pendek (min 3 karakter)"),
+    .isLength({ min: 3, max: 50 })
+    .withMessage("Nama disabilitas harus berada di antara 3-50 karakter"),
 
   body("type")
     .optional({ values: "falsy" })
@@ -218,10 +210,8 @@ const addJsDisabilityRules = [
 
   body("description")
     .optional({ values: "falsy" })
-    .isLength({ min: 3 })
-    .withMessage("Deskripsi terlalu pendek (min 3 karakter)")
-    .isLength({ max: 300 })
-    .withMessage("Deskripsi terlalu panjang (max 300 karakter)"),
+    .isLength({ min: 3, max: 300 })
+    .withMessage("Deskripsi harus berada di antara 3-300 karakter"),
 
   // CUSTOM RULE
   body().custom((_, { req }) => {

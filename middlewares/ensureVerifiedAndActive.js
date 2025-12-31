@@ -20,7 +20,7 @@ const ensureVerifiedAndActive = async (req, res, next) => {
       });
     }
 
-    if (!user.isActive || !user.isVerified || !user.isComplete) {
+    if (user.accountStatus !== "active") {
       return res.status(404).json({
         success: false,
         message: "User tidak ditemukan",

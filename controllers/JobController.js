@@ -12,7 +12,7 @@ const {
   Industry,
   UserProfile,
 } = require("../models");
-const sequelize = require("../configs/database");
+const sequelize = require("../config/database");
 const { Op, literal, fn, col, where } = require("sequelize");
 const moment = require("moment");
 
@@ -35,27 +35,18 @@ exports.addJob = async (req, res) => {
   try {
     const user = req.dbUser;
 
+    //find company
     const company = await Company.findOne({
       where: { userId: user.id },
       transaction: t,
     });
-
     if (!company) {
       await t.rollback();
-      return res.status(403).json({ message: "Company data not found" });
+      return res.status(404).json({ message: "Perusahaan tidak ditemukan" });
     }
 
     const skills = req.body.skills;
     const disabilities = req.body.disabilities;
-
-    if (skills !== undefined && !Array.isArray(skills)) {
-      await t.rollback();
-      return res.status(400).json({ message: "skills must be an array" });
-    }
-    if (disabilities !== undefined && !Array.isArray(disabilities)) {
-      await t.rollback();
-      return res.status(400).json({ message: "disabilities must be an array" });
-    }
 
     const today = moment().startOf("day");
     const start = moment(req.body.startDate, "YYYY-MM-DD");
@@ -64,7 +55,6 @@ exports.addJob = async (req, res) => {
     if (start.isSame(today, "day")) {
       autoStatus = "open";
     }
-
     const jobPayload = {
       companyId: company.id,
       title: req.body.title,
@@ -100,9 +90,9 @@ exports.addJob = async (req, res) => {
         const missing = ids.filter((i) => !foundIds.has(i));
         if (missing.length) {
           await t.rollback();
-          return res
-            .status(400)
-            .json({ message: `Skill id not found: ${missing.join(", ")}` });
+          return res.status(400).json({
+            message: `ID skill tidak ditemukan: ${missing.join(", ")}`,
+          });
         }
         skillRows.forEach((r) => (skillMap[r.id] = r.name));
       }
@@ -118,6 +108,7 @@ exports.addJob = async (req, res) => {
           const rawName = s.name;
           const cleanName = String(rawName).trim().toLowerCase();
 
+          //create to SKILL
           const [skill] = await Skill.findOrCreate({
             where: { name: cleanName },
             defaults: { name: cleanName },
@@ -128,11 +119,11 @@ exports.addJob = async (req, res) => {
           skillName = skill.name;
         }
 
+        //create to JOBSKILL
         const jobSkill = await JobSkill.create(
           {
             jobId: job.id,
             skillId,
-            skillName,
           },
           { transaction: t }
         );
@@ -142,15 +133,13 @@ exports.addJob = async (req, res) => {
     }
 
     // -------------------
-    // DISABILITIES (fixed, safer)
+    // DISABILITIES
     // -------------------
     const createdDisabilities = [];
     if (Array.isArray(disabilities) && disabilities.length) {
-      // parse ids defensif: ignore "", null, undefined, non-positive integers
       const ids = disabilities
         .map((d) => {
           if (d === null || d === undefined) return null;
-          // treat empty string as no id
           if (d.id === "" || d.id === null || d.id === undefined) return null;
           const parsed = Number(d.id);
           return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -169,7 +158,7 @@ exports.addJob = async (req, res) => {
         if (missing.length) {
           await t.rollback();
           return res.status(400).json({
-            message: `Disability id not found: ${missing.join(", ")}`,
+            message: `ID Disabilitas tidak ditemukan: ${missing.join(", ")}`,
           });
         }
 
@@ -203,12 +192,11 @@ exports.addJob = async (req, res) => {
         const hasId = Number.isInteger(parsedId) && parsedId > 0;
 
         if (hasId) {
-          // jika id diberikan, pastikan memang ada di DB (disMap)
           if (!disMap[parsedId]) {
             await t.rollback();
             return res
               .status(400)
-              .json({ message: `Disability id not found: ${parsedId}` });
+              .json({ message: `ID disabilitas tidak ditemukan: ${parsedId}` });
           }
           disabilityId = parsedId;
           disabilityName = disMap[parsedId].name;
@@ -222,7 +210,7 @@ exports.addJob = async (req, res) => {
           let cleanType = String(rawType).trim().toLowerCase();
           if (!allowedTypes.includes(cleanType)) cleanType = "other";
 
-          // findOrCreate berdasarkan kolom yang benar (model punya 'type')
+          //create to DISABILITY
           const [dis] = await Disability.findOrCreate({
             where: { name: cleanName, type: cleanType },
             defaults: { name: cleanName, type: cleanType },
@@ -235,12 +223,11 @@ exports.addJob = async (req, res) => {
           if (!allowedTypes.includes(disabilityType)) disabilityType = "other";
         }
 
+        //create to JOBDISABILITY
         const jobDis = await JobDisability.create(
           {
             jobId: job.id,
             disabilityId,
-            disabilityName,
-            type: disabilityType,
           },
           { transaction: t }
         );
@@ -253,7 +240,7 @@ exports.addJob = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Job successfully created",
+      message: "Pekerjaan baru berhasil ditambahkan",
       data: {
         ...job.dataValues,
         skills: createdSkills,
@@ -262,7 +249,10 @@ exports.addJob = async (req, res) => {
     });
   } catch (err) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Internal server error",
+    });
   }
 };
 //add job skill
@@ -270,13 +260,6 @@ exports.addJobSkill = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const jobId = req.job?.id;
-    if (!jobId) {
-      await t.rollback();
-      return res.status(400).json({
-        success: false,
-        message: "Job not found or unauthorized",
-      });
-    }
 
     const { skillId, skillName } = req.body;
 
@@ -290,7 +273,7 @@ exports.addJobSkill = async (req, res) => {
         await t.rollback();
         return res.status(400).json({
           success: false,
-          message: "Skill ID not found",
+          message: "ID skill tidak ditemukan",
         });
       }
 
@@ -304,8 +287,8 @@ exports.addJobSkill = async (req, res) => {
         where: { name: skillName.trim().toLowerCase() },
         transaction: t,
       });
-
       if (!skill) {
+        //create to SKILL
         skill = await Skill.create(
           { name: skillName.trim().toLowerCase() },
           { transaction: t }
@@ -316,14 +299,15 @@ exports.addJobSkill = async (req, res) => {
       finalSkillName = skill.name;
     }
 
-    if (!finalSkillName) {
+    if (!finalSkillId || !finalSkillName) {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        message: "Invalid skill name",
+        message: "Skill invalid",
       });
     }
 
+    //count total JOBSKILL
     const totalSkills = await JobSkill.count({
       where: { jobId },
       transaction: t,
@@ -333,17 +317,15 @@ exports.addJobSkill = async (req, res) => {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        message: "Maximum skill limit reached (20 per job)",
+        message: "Maksimum skill pekerjaan tercapai (max 20)",
       });
     }
 
+    // Check for existing skill for this job
     const existing = await JobSkill.findOne({
       where: {
         jobId,
-        [Op.or]: [
-          finalSkillId ? { skillId: finalSkillId } : null,
-          { skillName: finalSkillName },
-        ].filter(Boolean),
+        skillId: finalSkillId,
       },
       transaction: t,
     });
@@ -352,7 +334,7 @@ exports.addJobSkill = async (req, res) => {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        message: "Skill is already added",
+        message: "Skill sudah ditambahkan sebelumnya",
       });
     }
 
@@ -360,8 +342,7 @@ exports.addJobSkill = async (req, res) => {
     const newJobSkill = await JobSkill.create(
       {
         jobId,
-        skillId: finalSkillId || null,
-        skillName: finalSkillName,
+        skillId: finalSkillId,
       },
       { transaction: t }
     );
@@ -370,12 +351,18 @@ exports.addJobSkill = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "New job skill added successfully",
-      data: newJobSkill,
+      message: "Skill pekerjaan berhasil ditambahkan",
+      data: {
+        ...newJobSkill.toJSON(),
+        skillName: finalSkillName,
+      },
     });
   } catch (error) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 //add job disability
@@ -383,13 +370,6 @@ exports.addJobDisability = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const jobId = req.job?.id;
-    if (!jobId) {
-      await t.rollback();
-      return res.status(400).json({
-        success: false,
-        message: "Job not found or unauthorized",
-      });
-    }
 
     const { disabilityId, disabilityName, type } = req.body;
 
@@ -404,7 +384,7 @@ exports.addJobDisability = async (req, res) => {
         await t.rollback();
         return res
           .status(400)
-          .json({ success: false, message: "Disability ID not found" });
+          .json({ success: false, message: "ID disabilitas tidak ditemukan" });
       }
       finalDisabilityId = dis.id;
       finalDisabilityName = dis.name;
@@ -423,10 +403,11 @@ exports.addJobDisability = async (req, res) => {
           await t.rollback();
           return res.status(400).json({
             success: false,
-            message: "Required fields are still incomplete",
+            message: "Field yang dibutuhkan masih belum lengkap",
           });
         }
 
+        //create to DISABILITY
         dis = await Disability.create(
           { name: disabilityName, type, description: null },
           { transaction: t }
@@ -445,26 +426,23 @@ exports.addJobDisability = async (req, res) => {
         .json({ success: false, message: "Nama/Tipe disabilitas tidak valid" });
     }
 
+    //count JOBDISABILITY
     const totalDisabilities = await JobDisability.count({
       where: { jobId },
       transaction: t,
     });
-
     if (totalDisabilities >= 20) {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        message: "Maximum disability limit reached (20 per job)",
+        message: "Maksimum disabilitas pekerjaan tercapai (max 20)",
       });
     }
 
     const existing = await JobDisability.findOne({
       where: {
         jobId,
-        [Op.or]: [
-          finalDisabilityId ? { disabilityId: finalDisabilityId } : null,
-          { disabilityName: finalDisabilityName },
-        ].filter(Boolean),
+        disabilityId: finalDisabilityId,
       },
       transaction: t,
     });
@@ -473,17 +451,15 @@ exports.addJobDisability = async (req, res) => {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        message: "Disability is already added",
+        message: "Disabilitas sudah ditambahkan sebelumnya",
       });
     }
 
-    //create job disability
+    //create to JOBDISABILITY
     const newJobDisability = await JobDisability.create(
       {
         jobId,
-        disabilityId: finalDisabilityId || null,
-        disabilityName: finalDisabilityName,
-        type: finalDisabilityType,
+        disabilityId: finalDisabilityId,
       },
       { transaction: t }
     );
@@ -492,12 +468,20 @@ exports.addJobDisability = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "New job disability added successfully",
-      data: newJobDisability,
+      message: "Disabilitas pekerjaan berhasil ditambahkan",
+      data: {
+        ...newJobDisability.toJSON(),
+        disabilityName: finalDisabilityName,
+      },
     });
   } catch (error) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: error.message });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 //delete job skill
@@ -513,7 +497,7 @@ exports.deleteJobSkill = async (req, res) => {
     if (!existing) {
       return res.status(404).json({
         success: false,
-        message: "Job skill not found",
+        message: "Skill pekerjaan tidak ditemukan",
       });
     }
 
@@ -521,10 +505,15 @@ exports.deleteJobSkill = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Job skill removed successfully",
+      message: "Skill pekerjaan berhasil dihapus",
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 //delete job disabilities
@@ -540,7 +529,7 @@ exports.deleteJobDisability = async (req, res) => {
     if (!existing) {
       return res.status(404).json({
         success: false,
-        message: "Job disability not found",
+        message: "Disabilitas pekerjaan tidak ditemukan",
       });
     }
 
@@ -548,21 +537,21 @@ exports.deleteJobDisability = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Job disability removed successfully",
+      message: "Disabilitas pekerjaan berhasil dihapus",
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 //edit job
 exports.editJob = async (req, res) => {
   try {
     const job = req.job;
-    if (!job) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Job tidak ditemukan" });
-    }
 
     const allowedFields = [
       "title",
@@ -586,12 +575,15 @@ exports.editJob = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Job berhasil diupdate",
+      message: "Data pekerjaan berhasil diperbarui",
     });
   } catch (error) {
     return res
       .status(500)
-      .json({ success: false, message: "Internal server error" });
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 
@@ -630,7 +622,7 @@ exports.getJobs = async (req, res) => {
       if (invalidDis.length) {
         return res.status(400).json({
           success: false,
-          message: `Invalid disabilityTypes values: ${invalidDis.join(", ")}`,
+          message: `Tipe disabilitas invalid (valid: ${invalidDis.join(", ")})`,
         });
       }
     }
@@ -746,8 +738,8 @@ exports.getJobs = async (req, res) => {
       limit,
       offset,
       order: [["createdAt", "DESC"]],
-      distinct: true, // Penting untuk menghindari duplikasi
-      subQuery: false, // Untuk query yang lebih kompleks
+      distinct: true,
+      subQuery: false,
     });
 
     const total = result.count;
@@ -796,11 +788,15 @@ exports.getJobs = async (req, res) => {
       data: scored,
     });
   } catch (err) {
-    console.error("getJobs error:", err);
-    return res.status(500).json({ success: false, message: err.message });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: err.message || "Internal server error",
+      });
   }
 };
-// GET /job/:jobId
+//get job by id
 exports.getJobById = async (req, res) => {
   try {
     const rawId = req.params.jobId;
@@ -809,7 +805,7 @@ exports.getJobById = async (req, res) => {
     if (!rawId || Number.isNaN(jobId) || jobId <= 0) {
       return res
         .status(400)
-        .json({ success: false, message: "jobId tidak valid" });
+        .json({ success: false, message: "ID pekerjaan invalid" });
     }
 
     const job = await Job.findOne({
@@ -825,7 +821,6 @@ exports.getJobById = async (req, res) => {
             "websiteLink",
             "establishedYear",
             "industryId",
-            "industryName",
           ],
           required: false,
           include: [
@@ -843,10 +838,12 @@ exports.getJobById = async (req, res) => {
     });
 
     if (!job) {
-      return res.status(404).json({ success: false, message: "Job not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Pekerjaan tidak ditemukan" });
     }
 
-    // Count applications for the job
+    //application count
     const applicationsCount = await JobApplication.count({ where: { jobId } });
 
     let applied = false;
@@ -868,69 +865,92 @@ exports.getJobById = async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
-// GET /job/:jobId/skills
+//get job skills jobId based
 exports.getJobSkills = async (req, res) => {
   try {
     const jobId = parseInt(req.params.jobId, 10);
     if (!jobId || Number.isNaN(jobId) || jobId <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid jobId" });
+      return res
+        .status(400)
+        .json({ success: false, message: "ID pekerjaan invalid" });
     }
 
-    // verify job exists (optional but nice)
+    //check the job
     const jobExists = await Job.findByPk(jobId, { attributes: ["id"] });
     if (!jobExists) {
-      return res.status(404).json({ success: false, message: "Job not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Pekerjaan tidak ditemukan" });
     }
 
     const skills = await JobSkill.findAll({
       where: { jobId },
-      attributes: ["id", "skillId", "skillName"],
+      attributes: ["id", "skillId"],
       include: [
         {
           model: Skill,
           attributes: ["id", "name"],
-          required: false,
+          required: true,
         },
       ],
     });
 
     return res.json({ success: true, data: skills });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
-// GET /job/:jobId/disabilities
+//get job disabilities jobId based
 exports.getJobDisabilities = async (req, res) => {
   try {
     const jobId = parseInt(req.params.jobId, 10);
     if (!jobId || Number.isNaN(jobId) || jobId <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid jobId" });
+      return res
+        .status(400)
+        .json({ success: false, message: "ID pekerjaan invalid" });
     }
 
-    // verify job exists
+    //check the job
     const jobExists = await Job.findByPk(jobId, { attributes: ["id"] });
     if (!jobExists) {
-      return res.status(404).json({ success: false, message: "Job not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Pekerjaan tidak ditemukan" });
     }
 
     const disabilities = await JobDisability.findAll({
       where: { jobId },
-      attributes: ["id", "disabilityId", "disabilityName"],
+      attributes: ["id", "disabilityId"],
       include: [
         {
           model: Disability,
           attributes: ["id", "name", "type"],
-          required: false,
+          required: true,
         },
       ],
     });
 
     return res.json({ success: true, data: disabilities });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 
@@ -955,7 +975,9 @@ exports.getJobApplications = async (req, res) => {
     // validate jobId
     const jobId = parseInt(req.params.jobId, 10);
     if (!jobId || Number.isNaN(jobId) || jobId <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid jobId" });
+      return res
+        .status(400)
+        .json({ success: false, message: "ID pekerjaan invalid" });
     }
 
     //find all
@@ -999,14 +1021,12 @@ exports.getJobApplications = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error",
+      message: error.message || "Internal server error",
     });
   }
 };
-
 //apply job
 exports.applyJob = async (req, res) => {
   try {
@@ -1046,18 +1066,14 @@ exports.applyJob = async (req, res) => {
       data: application,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };
 //update application status
 exports.updateApplicationStatus = async (req, res) => {
   try {
     const job = req.job;
-    if (!job) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Pekerjaan tidak ditemukan" });
-    }
+    
     const appId = req.params.appId;
     const application = await JobApplication.findOne({
       where: { id: appId, jobId: job.id },
@@ -1140,9 +1156,10 @@ exports.updateApplicationStatus = async (req, res) => {
       data: application,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };
+
 //reschedule job
 exports.rescheduleJob = async (req, res) => {
   try {
@@ -1150,7 +1167,7 @@ exports.rescheduleJob = async (req, res) => {
     if (!job) {
       return res
         .status(404)
-        .json({ success: false, message: "Job tidak ditemukan" });
+        .json({ success: false, message: "Pekerjaan tidak ditemukan" });
     }
 
     const currentStatus = String(job.status || "").toLowerCase();
@@ -1167,7 +1184,7 @@ exports.rescheduleJob = async (req, res) => {
     if (currentStatus === "closed" || currentStatus === "cancelled") {
       return res.status(400).json({
         success: false,
-        message: `Lowongan dengan status '${currentStatus}' tidak dapat di-reschedule.`,
+        message: `Pekerjaan dengan status '${currentStatus}' tidak dapat di-reschedule.`,
       });
     }
 
@@ -1263,30 +1280,28 @@ exports.rescheduleJob = async (req, res) => {
       message: "Aksi reschedule tidak diizinkan untuk status saat ini.",
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 };
 //update job status
 exports.updateJobStatus = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const job = req.job;
-    if (!job) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Job tidak ditemukan" });
-    }
 
     const currentStatus = String(job.status || "").toLowerCase();
     const { status: requestedStatusRaw, endDate: requestedEndDate } = req.body;
     const requestedStatus = String(requestedStatusRaw || "").toLowerCase();
 
     if (!requestedStatus) {
+      await transaction.rollback();
       return res
         .status(400)
         .json({ success: false, message: "Status target harus diberikan" });
     }
 
     if (requestedStatus === currentStatus) {
+      await transaction.rollback();
       return res.status(200).json({
         success: true,
         message: "Tidak ada perubahan status (status sama dengan sebelumnya)",
@@ -1295,37 +1310,55 @@ exports.updateJobStatus = async (req, res) => {
     }
 
     if (currentStatus === "cancelled") {
+      await transaction.rollback();
       return res.status(400).json({
         success: false,
-        message: "Lowongan yang telah dibatalkan tidak dapat diubah statusnya.",
+        message:
+          "Pekerjaan yang telah dibatalkan tidak dapat diubah statusnya.",
       });
     }
+
+    let withdrawnApplicationsCount = 0;
 
     // REQUEST: open
     if (requestedStatus === "open") {
       if (currentStatus === "pending") {
         job.status = "open";
       } else if (currentStatus === "closed") {
-        if (!requestedEndDate) {
+        const jobEndDate = moment(job.endDate, "YYYY-MM-DD");
+        const daysSinceClosed = moment().diff(jobEndDate, "days");
+
+        if (daysSinceClosed > 3) {
+          await transaction.rollback();
           return res.status(400).json({
             success: false,
             message:
-              "Untuk re-open, silakan sertakan endDate (format YYYY-MM-DD).",
+              "Tidak dapat re-open pekerjaan. Sudah lebih dari 3 hari sejak pekerjaan berakhir.",
+          });
+        }
+        if (!requestedEndDate) {
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message:
+              "Wajib menyertakan tanggal akhir untuk re-open (format YYYY-MM-DD).",
           });
         }
 
         const mEnd = moment(requestedEndDate, "YYYY-MM-DD", true);
         const mStart = moment(job.startDate, "YYYY-MM-DD", true);
         if (!mEnd.isAfter(mStart, "day")) {
+          await transaction.rollback();
           return res.status(400).json({
             success: false,
-            message: "endDate harus setelah startDate lowongan.",
+            message: "Tanggal akhir harus setelah tanggal awal pekerjaan",
           });
         }
 
         job.endDate = mEnd.format("YYYY-MM-DD");
         job.status = "open";
       } else {
+        await transaction.rollback();
         return res.status(400).json({
           success: false,
           message: `Transisi dari status '${currentStatus}' ke 'open' tidak diizinkan.`,
@@ -1337,27 +1370,51 @@ exports.updateJobStatus = async (req, res) => {
       if (currentStatus === "pending" || currentStatus === "open") {
         job.status = "cancelled";
         job.endDate = moment().format("YYYY-MM-DD");
+
+        //withdraw all related applied applications
+        const [affectedRows] = await JobApplication.update(
+          { status: "withdrawn" },
+          {
+            where: {
+              jobId: job.id,
+              status: "applied",
+            },
+            transaction,
+          }
+        );
+
+        withdrawnApplicationsCount = affectedRows;
       } else {
+        await transaction.rollback();
         return res.status(400).json({
           success: false,
           message: `Transisi dari status '${currentStatus}' ke 'cancelled' tidak diizinkan.`,
         });
       }
     } else {
+      await transaction.rollback();
       return res.status(400).json({
         success: false,
         message: "Status target tidak valid atau tidak diizinkan.",
       });
     }
 
-    await job.save();
+    //save
+    await job.save({ transaction });
+
+    await transaction.commit();
+
+    const responseMessage =
+      requestedStatus === "cancelled" && withdrawnApplicationsCount > 0
+        ? `Status lowongan berhasil diperbarui. ${withdrawnApplicationsCount} lamaran dengan status applied telah ditarik.`
+        : "Status lowongan berhasil diperbarui.";
 
     return res.status(200).json({
       success: true,
-      message: "Status lowongan berhasil diperbarui.",
-      data: job,
+      message: responseMessage,
     });
   } catch (error) {
+    await transaction.rollback();
     return res.status(500).json({ success: false, message: error.message });
   }
 };

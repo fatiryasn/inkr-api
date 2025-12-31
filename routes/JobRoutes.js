@@ -32,6 +32,9 @@ const {
 const checkJobOwner = require("../middlewares/checkJobOwner");
 const optionalAuth = require("../middlewares/optionalAuth");
 
+/*
+  JOB CREATION ROUTES
+*/
 //add new job (company)
 router.post(
   "/job",
@@ -41,7 +44,6 @@ router.post(
   validateMiddleware,
   addJob
 );
-
 //add job skill
 router.post(
   "/job/:jobId/skill",
@@ -78,7 +80,20 @@ router.delete(
   checkJobOwner,
   deleteJobDisability
 );
+//edit job (company)
+router.put(
+  "/job/:jobId",
+  verifyToken(["company"]),
+  ensureVerifiedAndActive,
+  checkJobOwner,
+  editJobRules,
+  validateMiddleware,
+  editJob
+);
 
+/*
+  JOB VISUALIZATION ROUTES
+*/
 //get jobs
 router.get("/jobs", getJobs);
 //get job by id
@@ -96,6 +111,9 @@ router.get(
   getJobApplications
 );
 
+/*
+  JOB APPLICATION ROUTES
+*/
 //apply job
 router.post(
   "/job/:jobId/apply",
@@ -116,17 +134,6 @@ router.patch(
   updateApplicationStatus
 );
 
-//edit job (company)
-router.put(
-  "/job/:jobId",
-  verifyToken(["company"]),
-  ensureVerifiedAndActive,
-  checkJobOwner,
-  editJobRules,
-  validateMiddleware,
-  editJob
-);
-
 //update job status (company)
 router.patch(
   "/job/:jobId/status",
@@ -137,7 +144,6 @@ router.patch(
   validateMiddleware,
   updateJobStatus
 );
-
 //reschedule job
 router.patch(
   "/job/:jobId/reschedule",

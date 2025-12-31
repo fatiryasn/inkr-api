@@ -1,15 +1,22 @@
 require('dotenv').config();
 const express = require('express');
-const sequelize = require('./configs/database');
+const sequelize = require('./config/database');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 
+//routes
 const authRoute = require("./routes/AuthRoutes")
 const jobSeekerRoute = require("./routes/JobSeekerRoutes")
 const userRoute = require("./routes/UserRoutes")
 const jobRoute = require('./routes/JobRoutes')
 const dataRoute = require('./routes/DataRoutes')
 const companyRoute = require('./routes/CompanyRoutes')
+
+//cron
+require("./cron/cleanupPendingUsers");
+require("./cron/activateSuspendedUsers")
+require("./cron/openJobs")
+require("./cron/closeJobs")
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -25,19 +32,16 @@ app.use("/api/data", dataRoute)
 app.use("/api", companyRoute)
 
 app.get("/", (req, res) => {
-  res.send("Inklusi kerja API");
+  res.send("Inklusi Kerja API");
 });
 
 app.listen(port, async () => {
-  console.log(`🚀 Server running on port ${port}`);
+  console.log(`Server running on port ${port}`);
 
   try {
     await sequelize.authenticate();
-    console.log("✅ Database connected successfully");
-
-    await sequelize.sync();
-    console.log("🛠️ Model synchronized");
+    console.log("Database connected successfully");
   } catch (err) {
-    console.error("❌ Failed to sync/connect to database", err);
+    console.error("Failed to sync/connect to database", err);
   }
 });

@@ -27,26 +27,22 @@ router.get("/job-seekers", getJobSeekers)
 
 //get job seeker educations
 router.get("/user/js/:userId/educations", getJsEducations);
-
 //get job seeker experiences
 router.get("/user/js/:userId/experiences", getJsExperiences);
-
 //get job seeker skills
 router.get("/user/js/:userId/skills", getJsSkills);
-
 //get job seeker disabilities
 router.get("/user/js/:userId/disabilities", getJsDisabilities);
 
 //update job seeker profile
 router.put(
   "/user/js/profile",
-  verifyToken(["job-seeker"]),
+  verifyToken(["job-seeker", "admin", "super-admin"]),
   ensureVerifiedAndActive,
   jsProfileUpdateRules,
   validateMiddleware,
   jsProfileUpdate
 );
-
 //add job seeker education
 router.post(
   "/user/js/education",
@@ -56,7 +52,6 @@ router.post(
   validateMiddleware,
   addJsEducation
 );
-
 //add job seeker experience
 router.post(
   "/user/js/experience",
@@ -66,7 +61,6 @@ router.post(
   validateMiddleware,
   addJsExperience
 );
-
 //add job seeker skill
 router.post(
   "/user/js/skill",
@@ -76,7 +70,6 @@ router.post(
   validateMiddleware,
   addJsSkill
 );
-
 //add job seeker disability
 router.post(
   "/user/js/disability",
@@ -94,7 +87,6 @@ router.delete(
   ensureVerifiedAndActive,
   deleteJsEducation
 );
-
 //delete job seeker experience
 router.delete(
   "/user/js/experience/:detailId",
@@ -102,7 +94,6 @@ router.delete(
   ensureVerifiedAndActive,
   deleteJsExperience
 );
-
 //delete job seeker skill
 router.delete(
   "/user/js/skill/:detailId",
@@ -110,7 +101,6 @@ router.delete(
   ensureVerifiedAndActive,
   deleteJsSkill
 );
-
 //delete job seeker disability
 router.delete(
   "/user/js/disability/:detailId",

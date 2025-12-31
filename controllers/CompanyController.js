@@ -1,4 +1,5 @@
-const sequelize = require("../configs/database");
+const { Op, fn, col, where, literal } = require("sequelize");
+const sequelize = require("../config/database");
 const {
   Company,
   Industry,
@@ -9,11 +10,11 @@ const {
   JobApplication,
   UserProfile,
 } = require("../models");
-const { Op, fn, col, where, literal } = require("sequelize");
 
 //get companies
 exports.getCompanies = async (req, res) => {
   try {
+    //queries
     const { search, mustSearch, page = "1", limit = "30", country } = req.query;
 
     const parsedPage = Math.max(1, parseInt(page, 10) || 1);
@@ -54,25 +55,20 @@ exports.getCompanies = async (req, res) => {
       const industryCond = where(fn("LOWER", col("Industry.name")), {
         [Op.like]: `%${q}%`,
       });
-      const industryFbCond = where(fn("LOWER", col("Company.industryName")), {
-        [Op.like]: `%${q}%`,
-      });
 
       companyWhere[Op.and] = [
         {
-          [Op.or]: [nameCond, descCond, industryCond, industryFbCond],
+          [Op.or]: [nameCond, descCond, industryCond],
         },
       ];
     }
-
     const userWhere = {
-      isVerified: true,
-      isActive: true,
-      isComplete: true,
+      accountStatus: "active",
     };
 
     const offset = (parsedPage - 1) * parsedLimit;
 
+    //result
     const jobCountSubquery = `(SELECT COUNT(*) FROM jobs WHERE jobs.companyId = Company.id AND jobs.status = 'open')`;
 
     const result = await Company.findAndCountAll({
@@ -125,13 +121,6 @@ exports.getCompanyJobs = async (req, res) => {
   try {
     const ALLOWED_STATUSES = ["pending", "open", "closed", "cancelled"];
     const ALLOWED_LIMITS = [30, 50, 80];
-
-    // safety check untuk req.user
-    if (!req.user || !req.user.id) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Unauthorized: user not found" });
-    }
 
     const userId = Number(req.user.id);
     if (!userId || Number.isNaN(userId)) {
@@ -226,7 +215,7 @@ exports.getCompanyJobs = async (req, res) => {
       jobDisabilityInclude.where = { type: { [Op.in]: disabilityTypes } };
     }
 
-    // count of applications (literal)
+    // count of applications
     const applicationsCountLiteral = literal(
       `(SELECT COUNT(*) 
     FROM job_applications 
@@ -234,7 +223,6 @@ exports.getCompanyJobs = async (req, res) => {
     AND job_applications.status != 'withdrawn')`
     );
 
-    // include di count hanya bila diperlukan (mis. filter required)
     const countIncludes = [];
     if (jobDisabilityInclude.required) countIncludes.push(jobDisabilityInclude);
 
@@ -266,8 +254,10 @@ exports.getCompanyJobs = async (req, res) => {
       data: jobs,
     });
   } catch (error) {
-    console.error("getCompanyJobs error:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -309,21 +299,21 @@ exports.getCompanyApplication = async (req, res) => {
       });
     }
 
-    // cari company berdasarkan userId (pemilik company)
+    //find company
     const company = await Company.findOne({ where: { userId: req.user.id } });
     if (!company) {
       return res.status(404).json({
         success: false,
-        message: "Perusahaan tidak ditemukan untuk user ini",
+        message: "Perusahaan tidak ditemukan",
       });
     }
 
-    // build Job where: wajib companyId = company.id
+    //job where
     const jobWhere = {
       companyId: company.id,
     };
 
-    // application where clause dasar (filter status jika ada)
+    //application where
     const applicationWhere = {
       status: {
         [Op.ne]: "withdrawn",
@@ -402,14 +392,13 @@ exports.getCompanyApplication = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Berhasil mendapatkan data aplikasi perusahaan",
       meta: { page, limit, total: totalCount, totalPages },
       data: rows,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
@@ -417,15 +406,8 @@ exports.getCompanyApplication = async (req, res) => {
 //js application preview
 exports.getJsApplicationPreview = async (req, res) => {
   try {
-    const jsId = parseInt(req.params.jsId, 10);
+    const jsId = req.params.jsId;
     const userId = req.user.id;
-
-    if (!jsId || Number.isNaN(jsId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid jobseeker id",
-      });
-    }
 
     const company = await Company.findOne({
       where: { userId },
@@ -441,7 +423,7 @@ exports.getJsApplicationPreview = async (req, res) => {
     if (!company) {
       return res.status(403).json({
         success: false,
-        message: "Company not found or unauthorized",
+        message: "Perusahaan tidak ditemukan",
       });
     }
 
@@ -481,7 +463,7 @@ exports.getJsApplicationPreview = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };
@@ -492,15 +474,6 @@ exports.cmProfileUpdate = async (req, res) => {
 
   try {
     const userId = req.user.id;
-    const user = req.dbUser;
-
-    if (user.role !== "company") {
-      await t.rollback();
-      return res.status(403).json({
-        success: false,
-        message: "User bukan perusahaan",
-      });
-    }
 
     let company = await Company.findOne({ where: { userId }, transaction: t });
 
@@ -508,7 +481,7 @@ exports.cmProfileUpdate = async (req, res) => {
       await t.rollback();
       return res.status(404).json({
         success: false,
-        message: "Data perusahaan tidak ditemukan",
+        message: "Perusahaan tidak ditemukan",
       });
     }
 
@@ -525,7 +498,6 @@ exports.cmProfileUpdate = async (req, res) => {
     } = req.body;
 
     let finalIndustryId = null;
-    let finalIndustryName = null;
 
     const isUpdatingIndustry =
       req.body.hasOwnProperty("industryId") ||
@@ -536,7 +508,6 @@ exports.cmProfileUpdate = async (req, res) => {
         const industry = await Industry.findByPk(industryId, {
           transaction: t,
         });
-
         if (!industry) {
           await t.rollback();
           return res.status(400).json({
@@ -544,9 +515,7 @@ exports.cmProfileUpdate = async (req, res) => {
             message: "ID industri tidak ditemukan",
           });
         }
-
         finalIndustryId = industry.id;
-        finalIndustryName = industry.name;
       }
 
       if (!industryId && industryName) {
@@ -554,23 +523,20 @@ exports.cmProfileUpdate = async (req, res) => {
           where: { name: industryName },
           transaction: t,
         });
-
         if (!existing) {
           existing = await Industry.create(
             { name: industryName },
             { transaction: t }
           );
         }
-
         finalIndustryId = existing.id;
-        finalIndustryName = existing.name;
       }
 
-      if (!finalIndustryName) {
+      if (!finalIndustryId) {
         await t.rollback();
         return res.status(400).json({
           success: false,
-          message: "Nama industri tidak valid",
+          message: "Industri tidak valid",
         });
       }
     }
@@ -588,7 +554,6 @@ exports.cmProfileUpdate = async (req, res) => {
 
     if (isUpdatingIndustry) {
       updatedData.industryId = finalIndustryId;
-      updatedData.industryName = finalIndustryName;
     }
 
     if (websiteLink !== undefined) updatedData.websiteLink = websiteLink;
@@ -606,7 +571,7 @@ exports.cmProfileUpdate = async (req, res) => {
     await t.rollback();
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal server error",
     });
   }
 };

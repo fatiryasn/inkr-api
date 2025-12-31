@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const UserEducation = sequelize.define(
   "UserEducation",
@@ -50,8 +50,8 @@ const UserEducation = sequelize.define(
     },
   },
   {
+    timestamps: false,
     tableName: "user_educations",
-    indexes: [{ fields: ["institutionName"] }],
   }
 );
 

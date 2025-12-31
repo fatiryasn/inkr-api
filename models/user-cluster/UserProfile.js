@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../../configs/database");
+const sequelize = require("../../config/database");
 
 const UserProfile = sequelize.define(
   "UserProfile",
@@ -47,8 +47,9 @@ const UserProfile = sequelize.define(
     },
   },
   {
+    timestamps: false,
     tableName: "user_profiles",
-    indexes: [{ fields: ["fullName"] }, { fields: ["country"] }],
+    timestamps: false,
   }
 );
 
