@@ -148,7 +148,7 @@ exports.verifyOtp = async (req, res) => {
     user.refreshToken = refreshToken;
     await user.save();
 
-    res.cookie("refreshToken", refreshToken, {
+    res.cookie("adminRefreshToken", refreshToken, {
       httpOnly: true,
       secure: true,
       sameSite: "none",
@@ -247,7 +247,9 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({
+      where: { email, role: ["job-seeker", "company"] },
+    });
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -411,7 +413,12 @@ exports.jsRegister = async (req, res) => {
     });
   } catch (error) {
     if (t.finished !== "commit") await t.rollback();
-    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 
@@ -532,7 +539,12 @@ exports.cmRegister = async (req, res) => {
     });
   } catch (error) {
     if (t.finished !== "commit") await t.rollback();
-    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 
@@ -705,7 +717,12 @@ exports.googleAuth = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 
@@ -763,10 +780,14 @@ exports.completeGoogleAuth = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    return res.status(500).json({ success: false, message: error.message || "Internal server error"});
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
-
 
 //token
 exports.token = async (req, res) => {
@@ -774,7 +795,9 @@ exports.token = async (req, res) => {
     const refreshToken = req.cookies.refreshToken;
     if (!refreshToken) return res.sendStatus(401);
 
-    const user = await User.findOne({ where: { refreshToken } });
+    const user = await User.findOne({
+      where: { refreshToken, role: ["job-seeker", "company"] },
+    });
     if (!user) return res.sendStatus(403);
 
     jwt.verify(
@@ -787,7 +810,39 @@ exports.token = async (req, res) => {
       }
     );
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
+  }
+};
+//admin token
+exports.adminToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.adminRefreshToken;
+    if (!refreshToken) return res.sendStatus(401);
+
+    const user = await User.findOne({
+      where: { refreshToken, role: ["admin", "super-admin"] },
+    });
+    if (!user) return res.sendStatus(403);
+
+    jwt.verify(
+      refreshToken,
+      process.env.REFRESH_TOKEN_SECRET,
+      (err, decoded) => {
+        if (err) return res.sendStatus(403);
+        const newAccessToken = createAccessToken(user);
+        res.status(200).json({ success: true, accessToken: newAccessToken });
+      }
+    );
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 //logout
@@ -810,6 +865,11 @@ exports.logout = async (req, res) => {
     res.clearCookie("refreshToken");
     return res.status(200).json({ success: true, message: "Logout berhasil" });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };

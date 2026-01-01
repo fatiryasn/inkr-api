@@ -12,6 +12,7 @@ const {
   adminLogin,
   verifyOtp,
   setupGoogleAuth,
+  adminToken,
 } = require("../controllers/AuthController");
 const verifyToken = require("../middlewares/verifyToken");
 const {
@@ -53,6 +54,8 @@ router.post(
 
 //token
 router.get("/token", token);
+//admin token
+router.get("/admin-token", adminToken)
 //logout
 router.delete("/logout", logout);
 
