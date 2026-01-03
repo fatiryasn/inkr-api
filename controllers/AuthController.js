@@ -413,12 +413,10 @@ exports.jsRegister = async (req, res) => {
     });
   } catch (error) {
     if (t.finished !== "commit") await t.rollback();
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Internal server error",
-      });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -539,12 +537,10 @@ exports.cmRegister = async (req, res) => {
     });
   } catch (error) {
     if (t.finished !== "commit") await t.rollback();
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Internal server error",
-      });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -717,12 +713,10 @@ exports.googleAuth = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Internal server error",
-      });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -780,12 +774,10 @@ exports.completeGoogleAuth = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Internal server error",
-      });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -810,12 +802,10 @@ exports.token = async (req, res) => {
       }
     );
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Internal server error",
-      });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 //admin token
@@ -847,29 +837,55 @@ exports.adminToken = async (req, res) => {
 };
 //logout
 exports.logout = async (req, res) => {
-  const refreshToken = req.cookies.refreshToken;
-  if (!refreshToken) return res.sendStatus(401);
-
   try {
-    const user = await User.findOne({ where: { refreshToken } });
+    //cookie check
+    const refreshToken = req.cookies.refreshToken;
+    const adminRefreshToken = req.cookies.adminRefreshToken;
 
-    if (!user) {
-      return res.status(404).json({
+    if (!refreshToken && !adminRefreshToken) {
+      return res.status(400).json({
         success: false,
-        message: "User tidak ditemukan atau mungkin sudah logout",
+        message: "Tidak ada token yang ditemukan",
       });
     }
+
+    let user = null;
+
+    //find
+    if (refreshToken) {
+      user = await User.findOne({
+        where: { refreshToken },
+      });
+    }
+    if (!user && adminRefreshToken) {
+      user = await User.findOne({
+        where: { refreshToken: adminRefreshToken },
+      });
+    }
+
+    if (!user) {
+      res.clearCookie("refreshToken");
+      res.clearCookie("adminRefreshToken");
+      return res.status(200).json({
+        success: true,
+        message: "Logout berhasil (token tidak valid)",
+      });
+    }
+
     user.refreshToken = null;
-    user.save();
+    await user.save();
 
     res.clearCookie("refreshToken");
-    return res.status(200).json({ success: true, message: "Logout berhasil" });
+    res.clearCookie("adminRefreshToken");
+
+    return res.status(200).json({
+      success: true,
+      message: "Logout berhasil",
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Internal server error",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
