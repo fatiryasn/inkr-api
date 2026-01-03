@@ -562,12 +562,10 @@ exports.addJsSkill = async (req, res) => {
         .json({ success: false, message: "Nama skill tidak valid" });
     }
 
-    //create to USERSKILL
     const existing = await UserSkill.findOne({
       where: {
         userId,
         skillId: finalSkillId,
-        description
       },
       transaction: t,
     });
@@ -584,6 +582,7 @@ exports.addJsSkill = async (req, res) => {
       {
         userId,
         skillId: finalSkillId,
+        description,
       },
       { transaction: t }
     );
