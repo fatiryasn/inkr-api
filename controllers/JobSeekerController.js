@@ -515,7 +515,7 @@ exports.addJsSkill = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const { skillId, skillName } = req.body;
+    const { skillId, skillName, description } = req.body;
 
     let finalSkillId = null;
     let finalSkillName = null;
@@ -562,10 +562,12 @@ exports.addJsSkill = async (req, res) => {
         .json({ success: false, message: "Nama skill tidak valid" });
     }
 
+    //create to USERSKILL
     const existing = await UserSkill.findOne({
       where: {
         userId,
         skillId: finalSkillId,
+        description
       },
       transaction: t,
     });
@@ -680,6 +682,7 @@ exports.addJsDisability = async (req, res) => {
       {
         userId,
         disabilityId: finalDisabilityId,
+        description
       },
       { transaction: t }
     );
