@@ -593,7 +593,7 @@ exports.getOtherJobPreviews = async (req, res) => {
         "title",
         "employmentType",
         "locationType",
-        "createdAt",
+        "startDate",
       ],
       include: [
         {
@@ -720,16 +720,16 @@ exports.getCompanyOverviewStats = async (req, res) => {
       thisMonthApplicationCount = await JobApplication.count({
         where: {
           ...nonWithdrawnWhere,
-          appliedAt: { [Op.gte]: startOfMonth, [Op.lt]: startOfNextMonth },
+          createdAt: { [Op.gte]: startOfMonth, [Op.lt]: startOfNextMonth },
         },
       });
 
       // newest applications
       const rawNewestApps = await JobApplication.findAll({
         where: nonWithdrawnWhere,
-        order: [["appliedAt", "DESC"]],
+        order: [["createdAt", "DESC"]],
         limit: 4,
-        attributes: ["id", "jobId", "userId", "status", "message", "appliedAt"],
+        attributes: ["id", "jobId", "userId", "status", "message", "createdAt"],
         include: [
           {
             model: Job,
@@ -753,7 +753,7 @@ exports.getCompanyOverviewStats = async (req, res) => {
         userId: a.userId,
         status: a.status,
         message: a.message,
-        appliedAt: a.appliedAt,
+        createdAt: a.createdAt,
       }));
 
       // most popular job
@@ -850,7 +850,7 @@ exports.getJsApplicationStats = async (req, res) => {
     const thisMonthApplicationCount = await JobApplication.count({
       where: {
         ...baseWhere,
-        appliedAt: {
+        createdAt: {
           [Op.gte]: startOfMonth,
           [Op.lt]: startOfNextMonth,
         },

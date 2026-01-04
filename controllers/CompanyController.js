@@ -9,6 +9,7 @@ const {
   JobDisability,
   JobApplication,
   UserProfile,
+  Disability,
 } = require("../models");
 
 //get companies
@@ -76,7 +77,7 @@ exports.getCompanies = async (req, res) => {
       include: [
         {
           model: User,
-          attributes: ["id", "username", "profilePicture"],
+          attributes: ["id", "username", "profilePicture", "updatedAt"],
           where: userWhere,
           required: true,
         },
@@ -88,7 +89,7 @@ exports.getCompanies = async (req, res) => {
       attributes: {
         include: [[literal(jobCountSubquery), "jobCounts"]],
       },
-      order: [["updatedAt", "DESC"]],
+      order: [[{ model: User }, "updatedAt", "DESC"]],
       limit: parsedLimit,
       offset,
       distinct: true,
@@ -202,17 +203,45 @@ exports.getCompanyJobs = async (req, res) => {
     // includes
     const skillInclude = {
       model: JobSkill,
-      attributes: ["skillId", "skillName"],
+      attributes: ["skillId"],
       required: false,
     };
-    const jobDisabilityInclude = {
-      model: JobDisability,
-      attributes: ["disabilityId", "disabilityName", "type"],
-      required: false,
-    };
+    
+    // Build includes for counting
+    const countIncludes = [];
+    
+    // Build includes for fetching data
+    const fetchIncludes = [skillInclude];
+    
     if (disabilityTypes && disabilityTypes.length) {
-      jobDisabilityInclude.required = true;
-      jobDisabilityInclude.where = { type: { [Op.in]: disabilityTypes } };
+      const disabilityFilterInclude = {
+        model: JobDisability,
+        attributes: [],
+        required: false,
+        include: [
+          {
+            model: Disability,
+            attributes: [],
+            where: {
+              type: { [Op.in]: disabilityTypes }
+            },
+            required: true
+          }
+        ]
+      };
+      
+      // For count query (same structure)
+      countIncludes.push(disabilityFilterInclude);
+      
+      // For fetch query (same structure)
+      fetchIncludes.push(disabilityFilterInclude);
+    } else {
+      // If no disability type filtering, include JobDisability normally
+      fetchIncludes.push({
+        model: JobDisability,
+        attributes: ["disabilityId"],
+        required: false,
+      });
     }
 
     // count of applications
@@ -222,9 +251,6 @@ exports.getCompanyJobs = async (req, res) => {
     WHERE job_applications.jobId = Job.id
     AND job_applications.status != 'withdrawn')`
     );
-
-    const countIncludes = [];
-    if (jobDisabilityInclude.required) countIncludes.push(jobDisabilityInclude);
 
     const total = await Job.count({
       where: jobWhere,
@@ -236,7 +262,7 @@ exports.getCompanyJobs = async (req, res) => {
 
     const jobs = await Job.findAll({
       where: jobWhere,
-      include: [skillInclude, jobDisabilityInclude],
+      include: fetchIncludes,
       attributes: {
         include: [[applicationsCountLiteral, "applicationsCount"]],
       },
@@ -254,6 +280,7 @@ exports.getCompanyJobs = async (req, res) => {
       data: jobs,
     });
   } catch (error) {
+    console.error("Error in getCompanyJobs:", error);
     return res.status(500).json({
       success: false,
       message: error.message || "Internal server error",
@@ -267,8 +294,8 @@ exports.getCompanyApplication = async (req, res) => {
     const ALLOWED_STATUS = ["applied", "reviewed", "accepted", "rejected"];
     const ALLOWED_LIMITS = [30, 50, 80];
     const SORT_OPTIONS = {
-      newest: [["appliedAt", "DESC"]],
-      oldest: [["appliedAt", "ASC"]],
+      newest: [["createdAt", "DESC"]],
+      oldest: [["createdAt", "ASC"]],
     };
 
     // queries
@@ -433,7 +460,7 @@ exports.getJsApplicationPreview = async (req, res) => {
         userId: jsId,
         status: { [Op.ne]: "withdrawn" },
       },
-      attributes: ["id", "status", "appliedAt"],
+      attributes: ["id", "status", "createdAt"],
       include: [
         {
           model: Job,
@@ -449,7 +476,7 @@ exports.getJsApplicationPreview = async (req, res) => {
           required: true,
         },
       ],
-      order: [["appliedAt", "DESC"]],
+      order: [["createdAt", "DESC"]],
       limit: 3,
     });
 

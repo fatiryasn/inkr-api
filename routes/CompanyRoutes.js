@@ -23,7 +23,7 @@ router.get(
 );
 //get company's applications
 router.get(
-  "user/cm/applications",
+  "/user/cm/applications",
   verifyToken(["company"]),
   ensureVerifiedAndActive,
   getCompanyApplication

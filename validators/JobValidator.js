@@ -337,7 +337,9 @@ const rescheduleJobRules = [
       const today = moment().startOf("day");
       const start = moment(value, "YYYY-MM-DD");
       if (start.isBefore(today))
-        throw new Error("Tanggal mulai minimal adalah hari ini atau setelahnya");
+        throw new Error(
+          "Tanggal mulai minimal adalah hari ini atau setelahnya"
+        );
       return true;
     }),
 
@@ -366,6 +368,13 @@ const applyJobRules = [
     .trim()
     .isLength({ min: 3, max: 1000 })
     .withMessage("Pesan harus berada di antara 3-1000 karakter"),
+  body("email")
+    .trim()
+    .notEmpty()
+    .withMessage("Field yang dibutuhkan masih belum lengkap (email)")
+    .isEmail()
+    .withMessage("Format email tidak valid")
+    .normalizeEmail(),
   body("portofolioLink")
     .optional({ values: "falsy" })
     .isLength({ min: 3, max: 300 })

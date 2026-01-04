@@ -82,7 +82,7 @@ exports.getJobSeekers = async (req, res) => {
         },
         {
           model: UserDisability,
-          attributes: ["id", "disabilityName", "type"],
+          attributes: ["id"],
           include: [
             {
               model: Disability,
@@ -92,7 +92,7 @@ exports.getJobSeekers = async (req, res) => {
         },
         {
           model: UserSkill,
-          attributes: ["id", "skillName"],
+          attributes: ["id"],
           include: [
             {
               model: Skill,
@@ -681,7 +681,7 @@ exports.addJsDisability = async (req, res) => {
       {
         userId,
         disabilityId: finalDisabilityId,
-        description
+        description,
       },
       { transaction: t }
     );
@@ -783,8 +783,8 @@ exports.getJsApplications = async (req, res) => {
     ];
     const ALLOWED_LIMITS = [30, 50, 80];
     const SORT_OPTIONS = {
-      newest: [["appliedAt", "DESC"]],
-      oldest: [["appliedAt", "ASC"]],
+      newest: [["createdAt", "DESC"]],
+      oldest: [["createdAt", "ASC"]],
     };
 
     // queries
@@ -809,9 +809,7 @@ exports.getJsApplications = async (req, res) => {
     if (status && !ALLOWED_STATUS.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: `Status lamaran invalid (valid: ${ALLOWED_STATUS.join(
-          ", "
-        )})`,
+        message: `Status lamaran invalid (valid: ${ALLOWED_STATUS.join(", ")})`,
       });
     }
 

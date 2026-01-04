@@ -61,6 +61,8 @@ exports.addJob = async (req, res) => {
       description: req.body.description,
       employmentType: req.body.employmentType,
       locationType: req.body.locationType,
+      country: req.body.country,
+      city: req.body.city ?? null,
       address: req.body.address ?? null,
       minSalary: req.body.minSalary ? Number(req.body.minSalary) : null,
       maxSalary: req.body.maxSalary ? Number(req.body.maxSalary) : null,
@@ -657,13 +659,15 @@ exports.getJobs = async (req, res) => {
       },
       {
         model: JobSkill,
-        attributes: ["skillId", "skillName"],
+        attributes: ["skillId"],
+        include: [
+          {model: Skill, attributes: ["id", "name"]}
+        ],
       },
     ];
 
-    // --- handle disability filter dengan subquery ---
+    //disability filter
     if (disabilityTypes && disabilityTypes.length > 0) {
-      // Gunakan subquery untuk filter disabilityTypes
       const jobIdsWithDisability = await JobDisability.findAll({
         attributes: ["jobId"],
         include: [
@@ -678,7 +682,6 @@ exports.getJobs = async (req, res) => {
 
       const filteredJobIds = jobIdsWithDisability.map((item) => item.jobId);
 
-      // Jika tidak ada job yang memenuhi filter disability, return empty
       if (filteredJobIds.length === 0) {
         return res.json({
           success: true,
@@ -693,7 +696,7 @@ exports.getJobs = async (req, res) => {
       // Untuk data, tetap include JobDisability (tanpa filter di include)
       includes.push({
         model: JobDisability,
-        attributes: ["disabilityId", "disabilityName", "type"],
+        attributes: ["disabilityId"],
         include: [
           {
             model: Disability,
@@ -702,10 +705,9 @@ exports.getJobs = async (req, res) => {
         ],
       });
     } else {
-      // Jika tidak ada filter disability, include biasa
       includes.push({
         model: JobDisability,
-        attributes: ["disabilityId", "disabilityName", "type"],
+        attributes: ["disabilityId"],
         include: [
           {
             model: Disability,
@@ -1032,7 +1034,7 @@ exports.applyJob = async (req, res) => {
   try {
     const userId = req.user.id;
     const jobId = req.params.jobId;
-    const { message, portofolioLink } = req.body;
+    const { message, email, portofolioLink } = req.body;
 
     //check if job exists
     const job = await Job.findByPk(jobId);
@@ -1056,6 +1058,7 @@ exports.applyJob = async (req, res) => {
       userId,
       jobId,
       message: message || null,
+      email,
       portofolioLink: portofolioLink || null,
       status: "applied",
     });
